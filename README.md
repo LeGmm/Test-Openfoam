@@ -3,9 +3,12 @@
 把 `routeA_condensation_setup.py`（Fluent 路线 A：Mixture 多相 + 组分输运 + Lee 相变）移植到
 **OpenFOAM（multiphaseEulerFoam + 界面组分相变）**，用于多结构「冷凝效率」对比实验。
 
-> 当前可跑的是 v8_1 两步共轭链路：`caseCHT_qishi/`（Step1，9000 次外迭代）+ `case_v81_1tau/`
-> （Step2，1τ 诊断，冷壁 9459 面、T_int 均值 278.279 K）。v8_8 就绪算例为 `caseCHT_v88/`、`case_v88/`。
-> 旧的 `case/`、`caseCHT/` 已于 2026-10-20 归档移出（见 `_trash_2026-10-20/`）。
+> 当前主线是**稳态结构对比**（见 §3.7）：v8_1 `caseCHT_qishi/`（15000 外迭代）+ v8_8 `caseCHT_v88/`
+> （9000 外迭代，2026-10-21 跑完），用 `tools/condensation_metrics.py` 出四项对比指标。
+> 结果：v8_8 冷凝量 1.308 mg/h vs v8_1 1.233 mg/h（+6.0%）——见《报告_三任务交付_2026-10-21.html》。
+> 已废弃的 Step2 瞬态路线（`case_v81_1tau/`）保留作 P0-1 诊断用，但**不再是出数的前提**。
+> 旧的 `case/`、`caseCHT/` 已于 2026-10-20 归档移出，回收站本体已于 2026-10-21 删除。
+> 版本控制：2026-10-21 起本目录是 git 仓库（`.gitignore` 排除网格/结果/日志/缓存，仅入库配置与脚本）。
 
 ---
 
@@ -175,6 +178,35 @@ v8_1 的 T_int 已用 9000 步重映射（9459 面、均值 278.279 K、verify P
 Step1 能量比 1.080（阈值 <1.05），需续算后再取最终 T_int。
 旧结论"网格源头修复 / 薄片单元"已由 v8_8 审计与压力修复推翻，不要再按它排产。
 先跑满 1τ（约 27 h / 8 进程），观察 `alpha.liquid > 0`、沿 -Y 下沉与出口液相。
+
+---
+
+### 7. 结构对比：稳态路线（2026-10-21 定稿，当前主线）
+
+> 为什么不跑瞬态：Step2（`multiphaseEulerFoam`）实测 0.949 s/步、dt≈2.93e-5，
+> 跑满 1τ(2.97 s) ≈ **27 h/结构**，且当前崩在 t=0.0467 s（极小 α_l 单元液相温度发散）。
+> 本机负荷不允许，因此结构对比按「稳态为主」改走下面这条链路。
+
+```bash
+PY=C:/Users/LELE/.workbuddy/binaries/python/envs/default/Scripts/python.exe
+
+# ① 双区域转换（两结构各一次，已有产物可跳过）
+$PY tools/fluent_cas_to_foam_cht.py "<结构>.cas.h5" caseCHT_<结构>
+# ② 分区 + 稳态共轭 + 重构（8 进程；v8_8 实测 9000 外迭代 ≈ 4478 s）
+$PY tools/run_of_cmd.py caseCHT_X "decomposePar -allRegions -force"  log.decomp.txt
+$PY tools/run_of_cmd.py caseCHT_X "@_cmd_cht_v88.txt"                log.cht.txt
+$PY tools/run_of_cmd.py caseCHT_X "reconstructPar -allRegions"       log.recon.txt
+# ③ 四项指标（壁面温度 / 换热系数 / 冷凝量 / 出口含湿量）
+$PY tools/condensation_metrics.py caseCHT_X <最后外迭代数> --json _m_X.json
+```
+
+指标口径要点（**对比时务必保持一致**）：
+- 热负荷用**焓平衡** `ṁ·cp·ΔT`，**不要**用 `wallHeatFlux` 场积分——后者在现网格上与焓平衡差
+  7.6%（v8_1）/ 14.4%（v8_8），且偏差随网格变，不可横比。两者之比存于 `energy_ratio`。
+- 可横比的整体换热系数取 `h = UA/A`（UA = Q/对数平均温差）；逐面 `h_global` 只作空间分布参考。
+- 冷凝量用 Colburn–Hougen 传质类比（壁面饱和 + Stefan 流修正），出口按平衡取饱和，
+  前提 `NTU_m = h_m·A/Q_vol ≫ 1`（实测 6.6–7.2，成立）。假设与适用条件见
+  `tools/condensation_metrics.py` 文件头与《报告_三任务交付_2026-10-21.html》§3.6–3.7。
 
 ---
 

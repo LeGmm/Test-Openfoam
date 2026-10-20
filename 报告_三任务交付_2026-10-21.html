@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>三任务交付报告 · 2026-10-21 · 湿空气冷凝结构对比</title>
+<style>
+:root{
+--bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a323d;
+--tx:#e6edf3; --tx2:#9aa7b4; --tx3:#6e7b8a;
+--ok:#3fb950; --warn:#d29922; --bad:#f85149; --info:#58a6ff; --acc:#bc8cff;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+font:15px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;}
+.wrap{max-width:1180px;margin:0 auto;padding:46px 26px 80px;}
+header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:30px;}
+.kicker{color:var(--info);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px}
+h1{font-size:27px;line-height:1.35;margin:0 0 12px;font-weight:650;letter-spacing:-.01em}
+.meta{color:var(--tx3);font-size:13px}
+h2{font-size:20px;margin:46px 0 14px;padding-left:11px;border-left:3px solid var(--info);font-weight:620}
+h3{font-size:15.5px;margin:26px 0 9px;font-weight:620}
+p{margin:9px 0}
+ul,ol{margin:9px 0;padding-left:22px}
+li{margin:5px 0}
+code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12.6px;
+background:var(--panel2);padding:1.5px 5px;border-radius:4px;color:#c9d1d9}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+th{background:var(--panel2);color:var(--tx2);font-weight:600;text-align:left;
+padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:7px 10px;border-bottom:1px solid #1f262f;vertical-align:top}
+tr:hover td{background:#141a21}
+.num{font-family:"Cascadia Mono",Consolas,monospace;text-align:right;white-space:nowrap}
+.ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)} .dim{color:var(--tx3)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 17px;margin:14px 0}
+.box.hi{border-color:rgba(248,81,73,.45);background:linear-gradient(180deg,rgba(248,81,73,.08),var(--panel))}
+.box.good{border-color:rgba(63,185,80,.4);background:linear-gradient(180deg,rgba(63,185,80,.07),var(--panel))}
+.box.note{border-color:rgba(88,166,255,.35);background:linear-gradient(180deg,rgba(88,166,255,.06),var(--panel))}
+.box h4{margin:0 0 7px;font-size:14.5px}
+.box p{margin:5px 0;font-size:14px;color:var(--tx2)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:11px;margin:16px 0}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+.stat .k{color:var(--tx3);font-size:12px;margin-bottom:4px}
+.stat .v{font-size:18px;font-weight:640;font-family:"Cascadia Mono",Consolas,monospace}
+.stat .s{color:var(--tx3);font-size:11.5px;margin-top:3px}
+.pill{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:10px;font-weight:600;white-space:nowrap}
+.p0{background:rgba(248,81,73,.15);color:var(--bad);border:1px solid rgba(248,81,73,.4)}
+.p1{background:rgba(210,153,34,.15);color:var(--warn);border:1px solid rgba(210,153,34,.4)}
+.p2{background:rgba(88,166,255,.13);color:var(--info);border:1px solid rgba(88,166,255,.35)}
+.pq{background:rgba(188,140,255,.13);color:var(--acc);border:1px solid rgba(188,140,255,.38)}
+pre{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;
+font-family:"Cascadia Mono",Consolas,monospace;font-size:12.4px;line-height:1.65;color:#c9d1d9}
+.small{font-size:12.4px;color:var(--tx3)}
+footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:var(--tx3);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+<div class="kicker">TODO · CLEANUP · STRUCTURE COMPARE</div>
+<h1>三任务交付报告：待办梳理 / 文件清理 / v8_1–v8_8 结构冷凝对比</h1>
+<div class="meta">项目 <code>F:\B_Simulation\fangzhen-3\OpenFOAM</code> ｜ 快照 2026-10-21 02:35 ｜
+仓库 <code>git@github.com:LeGmm/Test-Openfoam.git</code>（本地已建，远端推送待授权，见 §0）</div>
+</header>
+
+<div class="box hi">
+<h4>先说结论（三句）</h4>
+<p><b>① 待办：</b>主线阻塞已从「网格/压力」彻底转移到「Step2 瞬态成本 + 液相温度发散」。
+按你「以稳态为主」的要求，本轮已把结构对比<b>改走稳态路线</b>并跑出第一组可对比数据，
+因此「P0 = 修瞬态」降级为<b>可选验证项</b>，不再是出数的前提。</p>
+<p><b>② 清理：</b>144 项候选 → 133 项三项核对全过并删除，<b>5.98 GB</b>；
+工程目录 7.4 GB → 2.0 GB。保留 11 项（72 MB）为证据链。
+删除前已打 <code>git tag baseline-2026-10-21</code>（提交 a2a88e4）。</p>
+<p><b>③ 对比：</b>同口径（稳态 CHT、9000 外迭代、边界与物性逐项一致、冷源面积同为 16.000 cm²）下，
+<b>v8_8 冷凝量 1.308 mg/h，比 v8_1 的 1.233 mg/h 高 6.0%</b>；出口含湿量 11.06 vs 12.12 g/kg。
+但差距<b>小于网格尺度不确定性</b>（流体网格 6.9× 差异），当前只能作为「排序倾向」，不能作为定量设计值。</p>
+</div>
+
+<div class="grid">
+<div class="stat"><div class="k">仓库体积</div><div class="v">19.7 MB</div><div class="s">263 文件，网格/结果全排除</div></div>
+<div class="stat"><div class="k">清理回收</div><div class="v">5.98 GB</div><div class="s">133 项 / 工程 7.4→2.0 GB</div></div>
+<div class="stat"><div class="k">v8_8 冷凝量</div><div class="v">1.308 mg/h</div><div class="s">v8_1 = 1.233 mg/h（+6.0%）</div></div>
+<div class="stat"><div class="k">总热导 UA</div><div class="v">+23.6%</div><div class="s">0.0637 → 0.0788 W/K</div></div>
+<div class="stat"><div class="k">v8_8 Step1</div><div class="v">9000 步</div><div class="s">8 进程 4478 s，rc=0</div></div>
+<div class="stat"><div class="k">未解阻塞</div><div class="v">2 项</div><div class="s">Step2 液相发散 / MPI smpd</div></div>
+</div>
+
+<div class="box note">
+<h4>§0 推送状态（需要你授权一次）</h4>
+<p>本地仓库已初始化并完成 4 次提交、1 个 tag，但<b>未能推送</b>：
+<code>gh auth status</code> 显示 github.com 账号 LeGmm 的 token <b>已失效</b>；
+SSH（<code>~/.ssh/happy2</code>）经本机代理后 <code>port 443 Connection closed</code>，不可达。
+git 因此无法读取凭据。请任选其一后我再推：</p>
+<pre>gh auth login -h github.com          # 方式一：重新登录（推荐）
+git -c credential.helper=manager ... # 方式二：提供 PAT
+# 方式三：把 ~/.ssh/happy2.pub 加到 GitHub 并放行 443 端口的 SSH</pre>
+<p class="small">已完成的部分不受影响：本地 4 次提交均可独立回滚；<code>git remote add origin</code> 待凭据就绪后一条命令即可。</p>
+</div>
+
+<!-- ══════════════ 第一节 ══════════════ -->
+<h2>一、剩余待办梳理</h2>
+
+<h3>1.1 结论</h3>
+<p>共 15 项，其中 <span class="bad">高优先级 5 项</span>、<span class="warn">中 6 项</span>、<span class="info">低 4 项</span>，
+另有 <span class="acc">4 项优先级无法判定</span>（1.5 单列）。
+<b>建议执行顺序：T1 → (T2 ∥ T3) → T4 → T5 → T6…</b>，即先定稿稳态指标口径与网格口径，
+再决定是否投入瞬态。原因：本轮已证明稳态路线能出对比数，
+此时投入 27 h/结构的瞬态，只有在「需要凝液形态证据」时才划算。</p>
+
+<h3>1.2 待办清单</h3>
+<table>
+<thead><tr><th>ID</th><th>事项</th><th>优先级</th><th>前置依赖</th><th>阻塞关系</th><th>建议顺序</th><th>验收判据</th></tr></thead>
+<tbody>
+<tr><td><b>T1</b></td><td>稳态指标口径定稿（Colburn–Hougen 模型写成 Methods 可引用形式 + 不确定性表）</td><td><span class="pill p0">高</span></td><td>无</td><td>阻塞论文任何冷凝数字</td><td>1</td><td>模型假设、Le 取值、边界润湿假设、误差预算逐条可引用</td></tr>
+<tr><td><b>T2</b></td><td>网格口径统一：把 v8_1 加密到与 v8_8 同量级，或反之</td><td><span class="pill p0">高</span></td><td>无</td><td>阻塞「定量」结论；不阻塞排序结论</td><td>2</td><td>两结构流体单元数比值 ≤1.5；UA 差 &lt;5%</td></tr>
+<tr><td><b>T3</b></td><td>Step1 能量比偏差归因（v8_1 7.6%、v8_8 14.4%，随网格变化）</td><td><span class="pill p0">高</span></td><td>无</td><td>阻塞「已收敛」的对外表述</td><td>2（与 T2 并行）</td><td>给出偏差来源（近壁梯度 / 焓口径 / 未收敛），或改用总焓口径</td></tr>
+<tr><td><b>T4</b></td><td>MS-MPI smpd 稳定性修复（<code>rc=3221225786</code>）</td><td><span class="pill p0">高</span></td><td>无</td><td>阻塞所有 8 进程长跑（含 Step2、加网格）</td><td>3</td><td>连续 8 进程跑 &gt;2 h 不中断</td></tr>
+<tr><td><b>T5</b></td><td>v8_8 Step1 收敛性补跑（9000 → 15000）并复核</td><td><span class="pill p0">高</span></td><td>T4</td><td>被 T4 阻塞；阻塞 v8_8 数字定稿</td><td>4</td><td>T_out 漂移 &lt;0.05 K / 1000 步；T_w 变化 &lt;0.1 K</td></tr>
+<tr><td><b>T6</b></td><td>写 <code>generate_case_cht.py</code>（CHT 字典生成器）</td><td><span class="pill p1">中</span></td><td>无</td><td>阻塞 T7 批量化</td><td>5</td><td>从 cas.h5 一键生成 caseCHT_*，preflight --checkmesh PASS</td></tr>
+<tr><td><b>T7</b></td><td>8 结构批量排产</td><td><span class="pill p1">中</span></td><td>T2, T6</td><td>被 T2/T6 阻塞</td><td>6</td><td>先跑 2 结构验证可比性，再决定全量</td></tr>
+<tr><td><b>T8</b></td><td>Step2 液相温度发散修复（α_l→1e-6 时能量方程病态）</td><td><span class="pill p1">中</span></td><td>T4</td><td>仅阻塞瞬态路线（已被稳态路线绕过）</td><td>7</td><td>0.1 s 门禁：Tf 保持 270–320 K，越过 0.0467 s 不崩</td></tr>
+<tr><td><b>T9</b></td><td>单向耦合潜热反馈补偿（用 Step2 Q_wall 反代一次）</td><td><span class="pill p1">中</span></td><td>T1</td><td>—</td><td>8</td><td>迭代一次后 T_int 变化 &lt;0.2 K，或论文明确披露</td></tr>
+<tr><td><b>T10</b></td><td>浮升力对照（Step1 用 rhoConst 干空气，Gr/Re²≈1.2 属混合对流）</td><td><span class="pill p1">中</span></td><td>T2</td><td>—</td><td>8（与 T9 并行）</td><td>perfectGas 对照组，给出 T_int 差值</td></tr>
+<tr><td><b>T11</b></td><td>README / 安装指南 / 旧报告去重统一</td><td><span class="pill p1">中</span></td><td>无</td><td>—</td><td>9</td><td>新读者按 README 一次跑通；无过时路径（WSL2/v11/cases/）</td></tr>
+<tr><td><b>T12</b></td><td><code>run_all.sh</code> 重写或删除 + <code>preflight</code> 增补（A_IN 校验、coldWall uniform 告警）</td><td><span class="pill p2">低</span></td><td>T6</td><td>—</td><td>10</td><td>故意把 A_IN 改 1% → FAIL；coldWall 为 uniform → WARN</td></tr>
+<tr><td><b>T13</b></td><td>写盘改 binary（现全 ascii，v8_8 单次约 75 MB）</td><td><span class="pill p2">低</span></td><td>T7</td><td>—</td><td>11</td><td>单时刻 &lt;30 MB；8 结构一轮 &lt;50 GB</td></tr>
+<tr><td><b>T14</b></td><td>MPI 流程脚本化（decomposePar → mpiexec → reconstructPar 一条命令）</td><td><span class="pill p2">低</span></td><td>T4</td><td>—</td><td>11（与 T13 并行）</td><td>一条命令带日志跑完并自动重构</td></tr>
+<tr><td><b>T15</b></td><td>安装 h5py（preflight 的 deps 项当前 FAIL，仅影响 cas.h5 转换复核）</td><td><span class="pill p2">低</span></td><td>无</td><td>—</td><td>12</td><td>preflight 全绿</td></tr>
+</tbody>
+</table>
+
+<h3>1.3 优先级无法判定的项（需你确认）</h3>
+<table>
+<thead><tr><th>事项</th><th>为什么判不了</th><th>判断依据</th><th>需要你确认的信息</th></tr></thead>
+<tbody>
+<tr><td>是否继续投入 Step2 瞬态（27 h/τ × N 结构）</td><td>成本确定（实测 0.949 s/步、dt≈2.93e-5），但<b>收益取决于论文需要什么证据</b></td><td>稳态 Colburn–Hougen 已能给出冷凝量/含湿量；瞬态额外给出的只有「凝液形态、液膜、排液」——而当前模型本来就没有排液模型（<code>mdot_cond</code> 不可用的根因）</td><td>目标期刊/审稿人是否要求凝液分布或液膜厚度的定量证据？还是只要冷凝速率与结构排序？</td></tr>
+<tr><td>8 结构全量 vs 只做 2 结构</td><td>单结构成本低（稳态 ≈1.5 h/8 进程），但总量取决于截止日期</td><td>按 9000 外迭代 + 重构，单结构约 1.5 h；8 结构一轮约 12 h（不含 T2 的加网格重跑）</td><td>论文截止日期；机器可独占的时段</td></tr>
+<tr><td>网格统一方向：v8_1 加密 还是 v8_8 粗化</td><td>加密更准但 v8_1 网格来自 Fluent 已定型的 cas.h5；粗化会损失 v8_8 已有的细网格信息</td><td>现流体 64,729 vs 444,474（6.9×）。加密 v8_1 需回 Fluent 重划或在 OF 内 refine；粗化 v8_8 会放大近壁梯度误差（现 14.4%）</td><td>是否在 Fluent 侧统一 8 个结构的网格设置并重新导出？（最干净但要回上游）</td></tr>
+<tr><td>潜热反馈迭代是否必要（T9）</td><td>误差量级未标定：单向耦合使壁温偏低 → 冷凝量偏高，但偏高多少没算过</td><td>本轮湿工况出口温度比干工况高约 10 K，说明潜热反馈确实是一阶效应</td><td>误差预算能接受多大？若 &gt;10% 则 T9 必须做</td></tr>
+</tbody>
+</table>
+
+<!-- ══════════════ 第二节 ══════════════ -->
+<h2>二、文件清理</h2>
+
+<h3>2.1 结论</h3>
+<p>144 项候选全部过一遍三项核对，<b>133 项通过并删除（5.98 GB）</b>，<b>11 项保留（72 MB）</b>。
+未通过的一律是「命中证据链守护名单」。删除前已建立可回滚基线
+<code>git tag baseline-2026-10-21</code>（提交 <code>a2a88e4</code>）。
+清理后 5 个在跑算例复跑 <code>tools/preflight.py</code> 全部 PASS（除 deps 缺 h5py，不影响求解）。</p>
+
+<h3>2.2 核对口径（三项，逐项过）</h3>
+<table>
+<thead><tr><th>核对项</th><th>判定方法</th><th>通过条件</th></tr></thead>
+<tbody>
+<tr><td>① 是否被引用</td><td>对全目录 .py/.sh/.md/.html/.jou/.wbjn 建 token 索引；区分<b>代码引用</b>与<b>报告提及</b>（后者是历史记录，不构成运行依赖）。<code>run_all.sh</code>/<code>prepare_all_structures.py</code>/<code>mesh_stats.py</code>/<code>compare.py</code> 依赖已停用的 <code>cases/</code>，其引用不计为有效依赖</td><td>无任何有效代码引用</td></tr>
+<tr><td>② 是否配置或核心逻辑</td><td>真配置 = 各算例 <code>0/</code>、<code>constant/</code>（非 polyMesh）、<code>system/</code>、<code>tools/*.py</code>；产物 = 时间目录、<code>polyMesh/</code>、<code>processor*/</code>、<code>postProcessing/</code>、VTK、<code>log.*</code>、<code>*.bak</code></td><td>属产物/缓存/备份，非配置非核心逻辑</td></tr>
+<tr><td>③ 删除后果</td><td>是否被当前算例占用；是否让版本历史/证据链悬空。命中守护名单（run2、diag_step2、audit_、4e-06、0.046、HD_A、两个官方教程）即判 WARN 保留</td><td>无可辨识的运行时依赖，且证据链不悬空</td></tr>
+</tbody>
+</table>
+<p class="small">核对器：<code>tools/audit_cleanup.py</code>（只读，绝不自删）；执行器 <code>tools/_do_cleanup.py</code>。
+两处假阳性已修掉：时间目录名是数字字面量（在 .py 里作为数值命中）；<code>__pycache__</code> 被核对器自身源码命中。</p>
+
+<h3>2.3 已删除（三项全过）</h3>
+<table>
+<thead><tr><th>类别</th><th class="num">回收</th><th>内容</th><th>可再生性</th></tr></thead>
+<tbody>
+<tr><td>回收站本体</td><td class="num">4.4 GB</td><td><code>_trash_2026-10-20/</code>：上轮已移出的缓存、孤儿、一次性实验副本（<code>_ss_test</code>/<code>_bench_mpi</code>/<code>_diag_step2</code>/<code>_slice</code>）、旧转换器算例（<code>case/</code>/<code>caseCHT/</code>）、重复探针（<code>HD_B</code>/<code>probe_qishi_v81</code>/<code>_qishi_cht</code>/<code>FO_case</code>/<code>FO_hd</code>/<code>_dup_demo</code>/<code>_dup2</code>）、Step2 分区时刻 1.6 GB</td><td>全部可由 .cas.h5 + 转换器或重算重建</td></tr>
+<tr><td>Step1 中间检查点</td><td class="num">1.1 GB</td><td><code>caseCHT_qishi</code> 非整千外迭代目录（约 100 个 × 11.75 MB）</td><td>保留 0 与每 1000 步共 16 个；<code>startFrom latestTime</code> 仍解析到 15000</td></tr>
+<tr><td>早期瞬态 / 缓存 / 一次性文件</td><td class="num">0.5 GB</td><td><code>case_v81_1tau/0.046</code> 之前的早期时刻、<code>tools/__pycache__</code>、<code>_cmd_*.txt</code>、<code>_nohup_*.out</code>、<code>comparison.csv</code></td><td>Python 字节码自动重建；命令文件对应进程已结束</td></tr>
+<tr><td colspan="1"><b>合计</b></td><td class="num"><b>5.98 GB</b></td><td colspan="2">工程目录 7.4 GB → <b>2.0 GB</b></td></tr>
+</tbody>
+</table>
+
+<h3>2.4 保留（未通过核对，附依据）</h3>
+<table>
+<thead><tr><th>路径</th><th class="num">体积</th><th>未通过项与依据</th></tr></thead>
+<tbody>
+<tr><td><code>case_v81_1tau/0.046</code></td><td class="num">31.2 MB</td><td>③ P0-1（液相温度发散）的<b>唯一单元级尸检场</b>：T.liquid 120.8–456.3 K @ cell 30576，y≈29.95 mm</td></tr>
+<tr><td><code>case_qishi/4e-06</code></td><td class="num">30.7 MB</td><td>③ 旧报告「爆温单元」证据（T.gas −95.7…1819 K），删则索引悬空</td></tr>
+<tr><td><code>log.1tau_v81_run2.txt</code></td><td class="num">8.3 MB</td><td>③ 用正确 T_int 的第二次 1τ 运行证据（本次崩溃复现链）</td></tr>
+<tr><td><code>log.diag_step2*.txt</code>（4 份）</td><td class="num">1.7 MB</td><td>③ Step2 阻塞根因报告的证据链</td></tr>
+<tr><td><code>log.audit_checkmesh_*.txt</code>（3 份）</td><td class="num">12 KB</td><td>③ v8_8 两区 Mesh OK 的书面证据</td></tr>
+<tr><td><code>log.audit_convert_v88</code></td><td class="num">0.5 KB</td><td>③ 转换过程证据</td></tr>
+</tbody>
+</table>
+
+<h3>2.5 回滚方式</h3>
+<pre>git tag                       # baseline-2026-10-21
+git checkout baseline-2026-10-21 -- .   # 取回基线版本的被跟踪文件
+python tools/audit_cleanup.py           # 随时重跑核对（只读）</pre>
+<p class="small">注意：<code>_trash_2026-10-20/</code> 被 .gitignore 排除、从未入库，其回滚依赖目录自身存在；
+本轮已按你的授权删除，删除动作不可逆——但其中每一项在上轮核对与本轮复核中均判定为可重建。</p>
+
+<!-- ══════════════ 第三节 ══════════════ -->
+<h2>三、v8_1 与 v8_8 结构冷凝对比</h2>
+
+<h3>3.1 结论</h3>
+<div class="box good">
+<p><b>同口径对比结论：</b>在入口 35 ℃/80%RH/2.0×10⁻⁵ kg/s、冷板 5 ℃/16 cm²、常压、稳态 CHT、9000 外迭代下，
+<b>v8_8 的冷凝速率为 1.308 mg/h，比 v8_1 的 1.233 mg/h 高 6.0%</b>；
+出口含湿量 <b>11.06 vs 12.12 g/kg 干空气</b>（低 8.8%），出口露点 15.41 vs 16.81 ℃。</p>
+<p><b>机制：</b>v8_8 的流固界面面积比 v8_1 大 <b>14.6%</b>（123.64 vs 107.91 cm²），
+总热导 UA 高 <b>23.6%</b>；但它的界面温度更不均（标准差 2.86 vs 0.079 K，中位 283.6 vs 278.3 K），
+12% 的界面实际不在冷却。干工况下这两个效应相抵（v8_1 反而多带走 3.0% 热量）；
+而湿工况潜热把气体抬到 ≈289 K、远离冷板温度，此时<b>热导主导</b>，v8_8 胜出。</p>
+<p><b>但：</b>6.0% 的差距<b>小于网格尺度差异（流体网格 6.9×）带来的不确定性</b>。
+当前结论只能作为「v8_8 不劣于 v8_1 的排序倾向」，不够格作定量设计值——必须先做 T2（网格口径统一）。</p>
+</div>
+
+<h3>3.2 同口径一致性说明（几何以外逐项核对）</h3>
+<table>
+<thead><tr><th>项目</th><th>v8_1（caseCHT_qishi）</th><th>v8_8（caseCHT_v88）</th><th>是否一致</th></tr></thead>
+<tbody>
+<tr><td>入口速度 U</td><td colspan="2"><code>fixedValue uniform (0 -0.1545 0)</code></td><td class="ok">一致</td></tr>
+<tr><td>入口温度 T</td><td colspan="2"><code>fixedValue 308.15 K</code></td><td class="ok">一致</td></tr>
+<tr><td>出口</td><td colspan="2">T：<code>inletOutlet</code>；U：<code>pressureInletOutletVelocity</code>；p_rgh 定压</td><td class="ok">一致</td></tr>
+<tr><td>流固界面</td><td colspan="2">双侧同名 <code>interface</code>、<code>mappedWall</code>、T = <code>compressible::turbulentTemperatureCoupledBaffleMixed</code></td><td class="ok">一致</td></tr>
+<tr><td>冷源 coldWall</td><td colspan="2"><code>fixedValue 278.15 K</code>，面积 <b>16.000 cm²</b>（7,624 / 7,615 面）</td><td class="ok">一致</td></tr>
+<tr><td>固体外表面 outer</td><td colspan="2"><code>zeroGradient</code>（绝热），面积 128.628 / 128.626 cm²</td><td class="ok">一致</td></tr>
+<tr><td>流体物性</td><td colspan="2"><code>rhoConst 1.1455</code>、<code>Cp 1006</code>、<code>mu 1.79e-5</code>、<code>Pr 0.7</code>、<code>hConst</code></td><td class="ok">一致</td></tr>
+<tr><td>入口/出口面积</td><td>1.130 / 1.130 cm²</td><td>1.130 / 1.130 cm²</td><td class="ok">一致（故 ṁ 相同）</td></tr>
+<tr><td>时间步（稳态）</td><td colspan="2"><code>ddt steadyState</code>、<code>deltaT 1</code>（外迭代计数）、同为 <b>9000</b> 外迭代</td><td class="ok">一致</td></tr>
+<tr><td>指标函数 FO</td><td colspan="2"><code>m_in/m_out/T_in/T_out/T_in_mw/T_out_mw/Q_interface/Q_solid</code>，逐字 diff 相同</td><td class="ok">一致</td></tr>
+<tr><td><b>流固界面面积</b>（几何，本就是被比对象）</td><td>107.910 cm² / 9,459 面</td><td>123.637 cm² / 62,158 面</td><td class="bad">差 +14.6%（结构差异本身）</td></tr>
+<tr><td><b>网格尺度</b></td><td>流体 64,729；固体 60,387</td><td>流体 444,474；固体 204,198</td><td class="bad"><b>不一致：6.9× / 3.4×</b></td></tr>
+</tbody>
+</table>
+<p class="small">网格尺度不一致是本次<b>唯一未达标的同口径项</b>：两个 cas.h5 由 Fluent 各自导出、网格设置不同，
+本轮未回上游重划。已量化为不确定性 U1，并单列为待办 T2。</p>
+
+<h3>3.3 量化指标（同口径，9000 外迭代）</h3>
+<table>
+<thead><tr><th>指标</th><th class="num">v8_1</th><th class="num">v8_8</th><th class="num">Δ</th><th>口径/来源</th></tr></thead>
+<tbody>
+<tr><td>流固界面面积 A</td><td class="num">107.910 cm²</td><td class="num">123.637 cm²</td><td class="num">+14.6%</td><td>polyMesh 面片 Newell 求和</td></tr>
+<tr><td>界面温度 T_w（面积加权）</td><td class="num">278.28 K</td><td class="num">279.82 K</td><td class="num">+1.54 K</td><td>CFD 直接输出</td></tr>
+<tr><td>界面温度 分布</td><td class="num">278.15–278.45<br>中位 278.29，σ=0.079</td><td class="num">278.15–287.00<br>中位 283.59，σ=2.861</td><td class="num">σ ×36</td><td>CFD 直接输出</td></tr>
+<tr><td><b>有效冷却面积比</b></td><td class="num">99.9%</td><td class="num">88.0%</td><td class="num">−11.9 pp</td><td>q&lt;0 且 ΔT&gt;0.5 K 的面积占比</td></tr>
+<tr><td>干工况热负荷 Q</td><td class="num">0.5757 W</td><td class="num">0.5586 W</td><td class="num">−3.0%</td><td><b>焓平衡 ṁ·cp·ΔT</b>（守恒口径）</td></tr>
+<tr><td>干工况出口温度 T_out</td><td class="num">279.53 K</td><td class="num">280.38 K</td><td class="num">+0.85 K</td><td>phi 加权（FO T_out_mw）</td></tr>
+<tr><td><b>总热导 UA</b></td><td class="num">0.0637 W/K</td><td class="num">0.0788 W/K</td><td class="num">+23.6%</td><td>Q / 对数平均温差</td></tr>
+<tr><td><b>整体换热系数 h = UA/A</b></td><td class="num">5.91 W/m²K</td><td class="num">6.37 W/m²K</td><td class="num">+7.9%</td><td>可横比的整体值</td></tr>
+<tr><td>局部 h 分布（相对主流温差）</td><td class="num">中位 4.44<br>p05–p95 0.12–229</td><td class="num">中位 5.92<br>p05–p95 0.42–99.4</td><td class="num">—</td><td>网格敏感，仅供空间分布参考</td></tr>
+<tr><td>传质 NTU_m</td><td class="num">6.61</td><td class="num">7.24</td><td class="num">+9.5%</td><td>h_m·A / Q_vol，Chilton–Colburn</td></tr>
+<tr><td><b>冷凝量 ṁ_cond</b></td><td class="num">1.233 mg/h<br>(3.425×10⁻⁷ kg/s)</td><td class="num">1.308 mg/h<br>(3.632×10⁻⁷ kg/s)</td><td class="num ok">+6.0%</td><td>UA + 湿空气焓平衡耦合求解</td></tr>
+<tr><td>传质能力校核</td><td class="num">1.749×10⁻⁶ kg/s</td><td class="num">1.382×10⁻⁶ kg/s</td><td class="num">均 ≫ ṁ_cond</td><td>→ 非传质控制，出口达饱和</td></tr>
+<tr><td><b>出口含湿量 ω_out</b></td><td class="num">12.12 g/kg</td><td class="num">11.06 g/kg</td><td class="num ok">−8.8%</td><td>入口 29.76 g/kg（35 ℃/80%RH）</td></tr>
+<tr><td>出口露点</td><td class="num">16.81 ℃</td><td class="num">15.41 ℃</td><td class="num">−1.40 K</td><td>出口按平衡取饱和</td></tr>
+<tr><td>冷凝效率 η</td><td class="num">59.3%</td><td class="num">62.8%</td><td class="num">+3.6 pp</td><td>ṁ_cond / 入口水蒸气量</td></tr>
+<tr><td>湿工况出口温度</td><td class="num">289.96 K</td><td class="num">288.56 K</td><td class="num">−1.40 K</td><td>潜热使气体比干工况高约 10 K</td></tr>
+</tbody>
+</table>
+
+<h3>3.4 求解与模型链路（为什么不跑瞬态）</h3>
+<ol>
+<li><b>导入：</b>两个 cas.h5 分别经 <code>tools/fluent_cas_to_foam_cht.py</code> 转为双区域 polyMesh →
+<code>caseCHT_qishi</code>（v8_1）、<code>caseCHT_v88</code>（v8_8）。源文件：
+<code>QiShi_v8_1_20261009/qishi_v8_1_files/dp0/FLTG/Fluent/FLTG.1-Setup-Output.cas.h5</code>、
+<code>Qishi_v8_8_20261012/qishi_v8_8_files/dp0/FLTG/Fluent/FLTG.2-Setup-Output.cas.h5</code>。</li>
+<li><b>求解：</b><code>chtMultiRegionFoam</code>，<code>ddtSchemes steadyState</code>，8 进程 MPI。
+v8_1 已跑到 15000（本轮另取 9000 作同口径对比）；v8_8 本轮跑 9000（4478 s，rc=0），已 <code>reconstructPar -allRegions</code>。</li>
+<li><b>指标：</b><code>tools/condensation_metrics.py</code> —— 面片面积 → wallHeatFlux/T 的 patch 值 →
+h → UA → Chilton–Colburn 得 h_m → UA + 湿空气焓平衡二分求湿工况出口温度 → 冷凝量/含湿量/露点。</li>
+<li><b>不跑瞬态的依据：</b>Step2（multiphaseEulerFoam + 界面组分相变）实测 0.949 s/步、dt≈2.93e-5，
+跑满 1τ(2.97 s) 需 <b>≈27 h/结构</b>；且当前在 t=0.0467 s 因极小 α_l 单元液相温度发散而崩
+（T.liquid 120.8–456.3 K）。本机负荷与工期均不允许，故按你的要求以稳态为主。</li>
+</ol>
+
+<h3>3.5 差异机理解释</h3>
+<table>
+<thead><tr><th>效应</th><th>方向</th><th>证据</th><th>净结果</th></tr></thead>
+<tbody>
+<tr><td>换热面积效应</td><td class="ok">v8_8 有利</td><td>界面面积 +14.6%；UA +23.6%；h(UA/A) +7.9%</td><td rowspan="3">干工况：<b>相抵</b>，v8_1 多带走 3.0% 热量（T_out 低 0.85 K）。<br>湿工况：<b>热导主导</b>，v8_8 冷凝量 +6.0%。<br>原因：潜热把气体抬到 ≈289 K，远离冷板温度 278 K，壁面 1.54 K 的温差劣势被摊薄，而 23.6% 的 UA 优势完整保留。</td></tr>
+<tr><td>固体导热路径效应</td><td class="bad">v8_8 不利</td><td>界面均温 +1.54 K；σ 从 0.079 → 2.861 K；中位 283.6 K；12% 界面不参与冷却</td></tr>
+<tr><td>潜热反馈（工况切换）</td><td class="warn">放大热导的作用</td><td>湿工况出口温度比干工况高约 10 K（280→290 K）</td></tr>
+</tbody>
+</table>
+<p class="small">一句话：<b>v8_8 用更大的面积换来了更高的热导，代价是固体侧温度均匀性变差；
+在「气体被潜热托住」的真实冷凝工况下，热导是决定性变量，所以 v8_8 略胜。</b></p>
+
+<h3>3.6 不确定性来源（按量级排序）</h3>
+<table>
+<thead><tr><th>ID</th><th>来源</th><th>量级估计</th><th>对结论的影响</th><th>消除办法</th></tr></thead>
+<tbody>
+<tr><td>U1</td><td><b>网格尺度差 6.9×</b>（流体 64.7k vs 444.5k）</td><td>大（未标定）</td><td>h 分布不可横比；UA/冷凝量是积分量受影响较小，但 6.0% 的差距在同一量级</td><td>T2 网格口径统一 + GCI</td></tr>
+<tr><td>U2</td><td><b>集总模型用单一平均壁温</b></td><td>大，尤其 v8_8</td><td>v8_8 界面 σ=2.86 K、中位 283.6 K，平均壁温 279.82 K 代表性差</td><td>改用分区集总（按温度带分 5–10 区）或直接求解组分场</td></tr>
+<tr><td>U3</td><td><b>近壁热流积分口径偏差</b></td><td>7.6%（v8_1）/ 14.4%（v8_8），随网格变</td><td>已改用守恒的焓平衡作主口径；但说明现有网格近壁梯度误差 8–14%</td><td>T3 归因 + 近壁加密</td></tr>
+<tr><td>U4</td><td><b>单向耦合：潜热不反馈固体</b></td><td>一阶（湿工况出口高 10 K）</td><td>壁温被低估 → 冷凝量被<b>高估</b></td><td>T9 迭代一次</td></tr>
+<tr><td>U5</td><td>Colburn–Hougen 假设壁面完全润湿、液膜热阻为零</td><td>单向（给出上限）</td><td>冷凝量是<b>传质控制上限</b></td><td>需瞬态/液膜模型才能评估</td></tr>
+<tr><td>U6</td><td>Step1 用 rhoConst 干空气、无浮升力（Gr/Re²≈1.2 混合对流区）</td><td>中</td><td>流场与 h 有系统性偏差</td><td>T10 perfectGas 对照</td></tr>
+<tr><td>U7</td><td>出口取平衡饱和（NTU_m 6.6–7.2 ≫1 支持，但未用瞬态验证）</td><td>中</td><td>若实际未达平衡，冷凝量偏低</td><td>需瞬态验证或分区集总</td></tr>
+<tr><td>U8</td><td>v8_8 只跑到 9000 外迭代（8500→9000 T_out 仍漂移 0.14 K）</td><td>小</td><td>v8_1 9000→15000 的 ṁ_cond 仅变 −0.7%，可作参照</td><td>T5 补跑到 15000</td></tr>
+<tr><td>U9</td><td>入口含湿量取 0.0289（35 ℃/80%RH）为定值，未做敏感性</td><td>小</td><td>线性影响 ṁ_cond</td><td>扫 Y_H2O</td></tr>
+</tbody>
+</table>
+
+<h3>3.7 结论适用条件</h3>
+<ul>
+<li><b>工况边界：</b>入口 35 ℃ / 80%RH / 2.0×10⁻⁵ kg/s / 常压；冷板（TEC 冷面）定温 5 ℃、面积 16.000 cm²；固体外表面绝热；重力 −Y。离开此工况需重算。</li>
+<li><b>结论性质：</b>只支持「<b>相对排序 + 量级</b>」——v8_8 ≥ v8_1，差值 6.0% 落在不确定性带内。<b>不支持</b>把 1.233 / 1.308 mg/h 当绝对设计值引用。</li>
+<li><b>模型边界：</b>冷凝量为<b>传质控制上限</b>（壁面全润湿、液膜热阻不计）；实际有液膜时会更低。结论在「不凝气体扩散阻力主导」时成立（本工况 Y_H2O≈0.029，成立）。</li>
+<li><b>不可外推：</b>不能用于凝液形态、液膜厚度、排液行为——当前链路没有液膜/排液模型。</li>
+<li><b>论文披露必备：</b>网格尺度差异（U1）、集总壁温（U2）、单向耦合（U4）、传质上限假设（U5）四条必须写进 Limitations。</li>
+</ul>
+
+<h3>3.8 复现命令</h3>
+<pre>PY=python   # C:/Users/LELE/.workbuddy/binaries/python/versions/3.13.12/python.exe
+
+# v8_8（本轮）：分区 → 稳态求解 → 重构 → 指标
+$PY tools/run_of_cmd.py caseCHT_v88 "decomposePar -allRegions -force" log.decomp_v88.txt
+$PY tools/run_of_cmd.py caseCHT_v88 "@_cmd_cht_v88.txt" log.cht_v88.txt     # mpiexec -np 8 chtMultiRegionFoam -parallel
+$PY tools/run_of_cmd.py caseCHT_v88 "reconstructPar -allRegions" log.recon_v88.txt
+$PY tools/condensation_metrics.py caseCHT_v88 9000 --json _m_v88.json
+$PY tools/condensation_metrics.py caseCHT_qishi 9000 --json _m_v81_9000.json</pre>
+
+<footer>
+证据文件：<code>_m_v81.json</code>（v8_1@15000）、<code>_m_v81_9000.json</code>、<code>_m_v88.json</code>（v8_8@9000）、
+<code>log.cht_v88.txt</code>、<code>log.recon_v88.txt</code>、<code>清理记录_2026-10-21.md</code>、
+<code>caseCHT_qishi/postProcessing/fluid/*</code>。<br>
+工具：<code>tools/audit_cleanup.py</code>（清理核对）、<code>tools/_do_cleanup.py</code>（执行）、
+<code>tools/condensation_metrics.py</code>（指标）、<code>tools/preflight.py</code>（门禁）。<br>
+本机环境：blueCFD-Core OpenFOAM 8，Windows，16 逻辑核，MS-MPI 8 进程。
+</footer>
+
+</div>
+</body>
+</html>

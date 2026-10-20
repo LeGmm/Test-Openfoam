@@ -198,7 +198,10 @@ def compute(case: str, time: str, patch: str = "interface",
     dT_glb = Tbulk - Tw
     with np.errstate(divide="ignore", invalid="ignore"):
         h_loc = np.where(dT_loc > 1e-3, -q / np.maximum(dT_loc, 1e-9), np.nan)
-        h_glb = np.where(dT_glb > 1e-3, -q / np.maximum(dT_glb, 1e-9), np.nan)
+        # 只在「壁面确实在冷却气体」的面给 h：q<0 且局部温差 >0.5 K。
+        # 否则壁面比主流还热（回流/远离冷板区）会给出 ±1e4 的无意义值。
+        ok = (q < 0) & (dT_glb > 0.5)
+        h_glb = np.where(ok, -q / np.maximum(dT_glb, 1e-9), np.nan)
     Q = float(np.sum(q * area))                     # W（负 = 流体放热）
 
     # ── Colburn–Hougen 冷凝速率（固定点迭代求出口含湿量）
@@ -238,7 +241,9 @@ def compute(case: str, time: str, patch: str = "interface",
     d1, d2 = 308.15 - Tw_bar, T_out_dry - Tw_bar
     dT_lm = (d1 - d2) / math.log(d1 / d2) if (d1 > 0 and d2 > 0 and abs(d1 - d2) > 1e-9) \
         else max(0.5 * (d1 + d2), 1e-6)
-    UA = abs(Q) / dT_lm                       # W/K
+    # 焓平衡热负荷（守恒、不依赖近壁梯度）：Q_flux = ṁ·cp·(T_in − T_out,通量加权)
+    Q_flux = m_total * cp * (308.15 - T_out_dry) if Tout_mw is not None else abs(Q)
+    UA = Q_flux / dT_lm                       # W/K（用守恒口径，不用近壁梯度积分）
     Q_vol = m_total / rho                     # m³/s
     hm_A = hm_bar * A                         # m³/s（传质"通风量"）
     NTU_m = hm_A / Q_vol                      # 传质传递单元数
@@ -311,6 +316,7 @@ def compute(case: str, time: str, patch: str = "interface",
         ww = None if w is None else np.asarray(w)[m]
         mean = float(np.average(v, weights=ww)) if ww is not None else float(v.mean())
         return dict(mean=mean, min=float(v.min()), max=float(v.max()), std=float(v.std()),
+                    median=float(np.median(v)),
                     p05=float(np.percentile(v, 5)), p95=float(np.percentile(v, 95)))
 
     res = {
@@ -320,10 +326,13 @@ def compute(case: str, time: str, patch: str = "interface",
         "area_m2": A,
         "T_wall": stats(Tw, area),
         "q_flux": stats(q, area),
-        "Q_W": Q,
+        "Q_W": Q,                       # wallHeatFlux 积分（近壁梯度，网格敏感）
+        "Q_flux_W": Q_flux,             # ṁ·cp·ΔT 焓平衡（守恒，对比主口径）
         "h_local": stats(h_loc, area),
         "h_global": stats(h_glb, area),
         "h_bar": h_bar, "h_m": hm_bar,
+        "h_UA": UA / A if A > 0 else float("nan"),   # 可横比的整体换热系数 = UA/A
+        "h_valid_area_m2": float(np.nansum(area[np.isfinite(h_glb)])),
         "T_wall_bar": Tw_bar,
         "UA_W_per_K": UA,
         "NTU_m": NTU_m, "hm_A_m3_s": hm_A, "Q_vol_m3_s": Q_vol,
