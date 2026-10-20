@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenFOAM 冷凝算例 — 网格合规修复与仿真能力评估</title>
+<style>
+  :root{
+    --bg:#0f1115; --card:#171a21; --card2:#1d212a; --line:#2a2f3a;
+    --txt:#e6e9ef; --dim:#9aa3b2; --acc:#4da3ff; --ok:#3ecf8e; --warn:#ffb454; --bad:#ff6b6b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);
+    font-family:"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    line-height:1.75;padding:40px 24px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:28px;margin-bottom:8px;letter-spacing:.3px}
+  .sub{color:var(--dim);font-size:14px;margin-bottom:32px}
+  h2{font-size:20px;margin:36px 0 14px;padding-left:12px;border-left:3px solid var(--acc)}
+  h3{font-size:16px;margin:22px 0 10px;color:var(--acc)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:18px 20px;margin:14px 0}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{padding:9px 11px;text-align:left;border-bottom:1px solid var(--line)}
+  th{background:var(--card2);color:var(--dim);font-weight:600;font-size:13px}
+  tr:last-child td{border-bottom:none}
+  code{background:#0b0d11;padding:2px 6px;border-radius:4px;font-size:13px;
+    color:#9ecbff;font-family:Consolas,monospace}
+  .ok{color:var(--ok);font-weight:600}
+  .bad{color:var(--bad);font-weight:600}
+  .warn{color:var(--warn);font-weight:600}
+  .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600}
+  .t-ok{background:rgba(62,207,142,.15);color:var(--ok)}
+  .t-bad{background:rgba(255,107,107,.15);color:var(--bad)}
+  .t-warn{background:rgba(255,180,84,.15);color:var(--warn)}
+  ul,ol{padding-left:22px}li{margin:5px 0}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;font-size:14px}
+  .kv b{color:var(--dim);font-weight:500}
+  pre{background:#0b0d11;border:1px solid var(--line);border-radius:8px;
+    padding:13px 15px;overflow-x:auto;font-size:13px;color:#c8d0dd;
+    font-family:Consolas,monospace;line-height:1.6}
+  .big{font-size:17px;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>OpenFOAM 冷凝算例：网格合规修复与仿真能力评估</h1>
+<div class="sub">
+  项目路径 <code>F:\B_Simulation\fangzhen-3\OpenFOAM</code> ｜ 评估对象
+  <code>case/</code>（单结构 v8_1）与 <code>cases/</code>（8 结构对比）｜
+  求解器 blueCFD-Core 2020-1 = OpenFOAM 8 ｜ 全部结论均为本机实测
+</div>
+
+<h2>一、结论速览</h2>
+
+<div class="card">
+  <div class="kv">
+    <b>网格朝向 bug</b><span><span class="tag t-ok">已修复</span>　转换器已落库修复，
+      <code>case/</code> 重建后 <code>checkMesh</code> 报 <b>Mesh OK</b>（0 失败项）</span>
+    <b>首步收敛</b><span><span class="tag t-ok">已解决</span>　H2O.gas 残差
+      1 → 0.0145（原为 1 → 245701 爆炸）</span>
+    <b>指标管线</b><span><span class="tag t-ok">正常</span>　5 个 functionObjects
+      全部实测出数，<code>compare.py</code> 能出 CSV</span>
+    <b>连续推进</b><span><span class="tag t-bad">仍阻塞</span>　第 2 个 PIMPLE 外循环
+      T 崩塌 → <code>janafThermo::limit</code> FATAL</span>
+    <b><code>cases/</code> 8 结构</b><span><span class="tag t-bad">跑不出结果</span>　
+      网格需重建，且阻塞在字典层面，重建网格不解决</span>
+  </div>
+</div>
+
+<h2>二、问题一：网格内部面朝向（已修复）</h2>
+
+<h3>2.1 缺陷性质</h3>
+<p><code>cases/</code> 下 8 个网格<b>全部不符合</b> OpenFOAM 约定。根因有两层：</p>
+
+<div class="card">
+<p><b>① owner 标号未归一化</b>（约 48–51% 内部面）<br>
+<code>owner</code> 直接取 Fluent 的 <code>c0</code>，近乎一半的面 <code>owner &gt; neighbour</code>。
+修复：交换标号并同时反转该面节点序（两者必须同做，否则法向与标号不一致）。</p>
+<p><b>② 内部面未按 (owner, neighbour) 字典序排列</b> ← 真正的隐蔽坑<br>
+只保证 <code>owner</code> 单调不减<b>不够</b>：同一个 <code>owner</code> 的多个面之间，
+<code>neighbour</code> 也必须递增，否则 <code>checkMesh</code> 报
+<code>Faces not in upper triangular order</code>（v8_1 实测 <b>127,895</b> 个）。</p>
+<p><b>③ 未使用节点</b>　只提取流体区后留下大量孤点（v8_1：559,886 → 243,054，
+丢弃 316,832 个，占 56.6%），触发 <code>Unused points found</code>。</p>
+</div>
+
+<h3>2.2 违规规模（磁盘实测）</h3>
+<table>
+<tr><th>算例</th><th>面数</th><th>owner≥neighbour 违例</th><th>占比</th><th>字典序违例</th></tr>
+<tr><td>v8_1</td><td>343,063</td><td class="bad">167,768</td><td class="bad">48.9%</td><td class="bad">161,201</td></tr>
+<tr><td>v8_8</td><td>2,462,132</td><td class="bad">1,152,061</td><td class="bad">51.9%</td><td>—</td></tr>
+<tr><td>v8_9</td><td>2,696,301</td><td class="bad">1,206,146</td><td class="bad">49.4%</td><td>—</td></tr>
+<tr><td>v8_10</td><td>2,854,861</td><td class="bad">1,290,599</td><td class="bad">50.8%</td><td>—</td></tr>
+<tr><td>v8_11</td><td>1,703,008</td><td class="bad">784,107</td><td class="bad">50.2%</td><td>—</td></tr>
+<tr><td>v8_12</td><td>1,842,474</td><td class="bad">843,775</td><td class="bad">50.2%</td><td>—</td></tr>
+<tr><td>v8_13</td><td>4,445,263</td><td class="bad">2,121,240</td><td class="bad">50.9%</td><td>—</td></tr>
+<tr><td>v8_14</td><td>2,602,797</td><td class="bad">1,197,880</td><td class="bad">50.4%</td><td>—</td></tr>
+</table>
+
+<h3>2.3 判据确认方法（实测，非推测）</h3>
+<p>没有依赖对 OpenFOAM 源码的猜测，而是用<b>决定性实验</b>：把内部面改用
+<code>np.lexsort((neigh, owner))</code> 全排序后，违规数
+<b>127,895 → 2</b>，同时 <code>Point usage OK</code>、<code>Mesh OK</code>。
+判据由此确认无歧义。</p>
+
+<h3>2.4 修复后验证</h3>
+<table>
+<tr><th>检查</th><th>结果</th></tr>
+<tr><td><code>check_face_orientation.py</code></td>
+    <td class="ok">RESULT: CONFORMS（A/B/C/D1/D2/E 六项全 0）</td></tr>
+<tr><td>真 <code>checkMesh -constant</code></td>
+    <td class="ok">Mesh OK ／ Failed 0 mesh checks</td></tr>
+<tr><td>非正交 / 偏斜</td><td>max 54.0° / max 3.17，均 OK</td></tr>
+<tr><td>最小体积</td><td>1.05e-12 m³，<span class="ok">OK</span></td></tr>
+</table>
+
+<p class="sub" style="margin-top:10px">
+附带修复：<code>case/</code> 全部字典原本缺 <code>version 2.0;</code>，
+OF8 启动即 FATAL IO ERROR——这个目录<b>从未真正运行过</b>。现已一并修好。
+</p>
+
+<h2>三、问题二：tools 脚本用法与前置文件</h2>
+
+<p>统一使用工程内置 Python（<b>不要用系统 anaconda</b>，脚本依赖 h5py / numpy）：</p>
+<pre>C:/Users/LELE/.workbuddy/binaries/python/envs/default/Scripts/python.exe</pre>
+
+<table>
+<tr><th>脚本</th><th>用法</th><th>前置文件 / 依赖</th></tr>
+<tr><td><code>prepare_all_structures.py</code></td>
+    <td><code>[结构名...]</code>，不带参数 = 全部 8 个</td>
+    <td>各结构 <code>.cas.h5</code> 在工程根（路径已硬编码于 <code>STRUCTURES</code>）</td></tr>
+<tr><td><code>fluent_cas_to_foam.py</code></td>
+    <td><code>&lt;x.cas.h5&gt; &lt;输出算例目录&gt;</code></td>
+    <td>须用 <b>Mesh 后的</b> <code>.cas.h5</code>（非 <code>Setup-Output</code>）；
+        自动识别流体 cell zone 与固流耦合界面</td></tr>
+<tr><td><code>generate_case.py</code></td>
+    <td><code>[输出目录]</code></td>
+    <td>无；参数在脚本顶部 <code>T_C / T_IN / MDOT / Y_H2O</code></td></tr>
+<tr><td><code>check_face_orientation.py</code></td>
+    <td><code>&lt;polyMesh目录&gt;</code></td>
+    <td>转换后的网格；纯 Python，秒级，无需 OpenFOAM</td></tr>
+<tr><td><code>of8.py</code></td>
+    <td><code>&lt;算例目录&gt; "&lt;OF命令&gt;" [超时秒]</code></td>
+    <td>blueCFD 在 <code>D:\APP\openfoam</code>；算例须有 <code>system/controlDict</code></td></tr>
+<tr><td><code>mesh_stats.py</code></td>
+    <td><code>[结构名...]</code></td>
+    <td>统计各结构 coldWall 面积</td></tr>
+<tr><td><code>compare.py</code></td>
+    <td><code>[结构名...]</code></td>
+    <td>需算例已跑完、有 <code>postProcessing/</code></td></tr>
+<tr><td><code>fetch_installer.py</code></td>
+    <td><code>[输出文件] [线程数]</code></td>
+    <td>OpenFOAM 安装包下载器（已装好，日常无需使用）</td></tr>
+</table>
+
+<pre># 典型流程
+python tools/prepare_all_structures.py            # 批量重建 8 个结构（网格 + 字典）
+python tools/check_face_orientation.py cases/v8_1/constant/polyMesh   # 快速自检
+python tools/of8.py cases/v8_1 "checkMesh -constant"                   # 权威检查
+./run_all.sh                # 在 blueCFD 终端里批量求解 + 出排名</pre>
+
+<div class="card">
+<b>环境坑（已踩并解决）</b><br>
+不能直接 <code>source etc/bashrc</code> —— Git Bash 的
+<code>MINGW64_NT</code> 被 blueCFD 判为不支持，且 <code>WM_TARGET_ARCH</code> 在
+bashrc 里是注释掉的，必须由 bat 传入。正确做法（<code>of8.py</code> 已封装）：<br>
+<code>cmd /c 'call "D:\APP\openfoam\setvars_OF8.bat" &amp;&amp; cd /d "&lt;case&gt;" &amp;&amp; &lt;命令&gt;'</code><br>
+注意 <code>setvars_OF8.bat</code> 内部会 <code>cd</code> 到安装根目录，所以必须之后再 <code>cd</code> 回算例目录。
+</div>
+
+<h2>四、仿真能得到什么结果</h2>
+
+<h3>4.1 已具备的能力（全部实测通过）</h3>
+<table>
+<tr><th>环节</th><th>状态</th><th>证据</th></tr>
+<tr><td>网格转换与合规</td><td class="ok">✔</td><td><code>Mesh OK</code>，0 失败项</td></tr>
+<tr><td>字典生成与解析</td><td class="ok">✔</td><td><code>version 2.0;</code> 已补齐，OF8 正常解析</td></tr>
+<tr><td>首个时间步收敛</td><td class="ok">✔</td><td>H2O.gas 1→0.0145，e.gas 1→0.0059，p_rgh→9.8e-8</td></tr>
+<tr><td>指标 functionObjects</td><td class="ok">✔</td><td>5 个 FO 全部落盘出数</td></tr>
+<tr><td>后处理与排名</td><td class="ok">✔</td><td><code>compare.py</code> 正常输出 CSV</td></tr>
+<tr><td><b>连续推进多个时间步</b></td><td class="bad">✘</td><td>第 2 个 PIMPLE 外循环 FATAL</td></tr>
+</table>
+
+<h3>4.2 六个跨结构冷凝效率指标（阻塞解开后可产出）</h3>
+<table>
+<tr><th>指标</th><th>物理含义</th><th>方向</th><th>FO 名</th></tr>
+<tr><td><b>ṁ_cond</b></td><td>出口凝液质量流率</td><td>越大越好</td><td><code>mdot_cond</code></td></tr>
+<tr><td><b>Y_H2O_out</b></td><td>出口水蒸气质量分数</td><td>越小=去湿越彻底</td><td><code>YH2O_out</code></td></tr>
+<tr><td><b>Q_wall</b></td><td>冷壁换热量（能量平衡反算）</td><td>越大越好</td><td>由 T_out 推算</td></tr>
+<tr><td><b>Δp</b></td><td>压降 p<sub>in</sub> − p<sub>out</sub></td><td>越小越好</td><td><code>p_in / p_out</code></td></tr>
+<tr><td><b>ṁ/Δp</b></td><td>单位压降凝液量（综合评价）</td><td>越大越好</td><td>计算量</td></tr>
+<tr><td><b>T_out</b></td><td>出口温度</td><td>—</td><td><code>T_out</code></td></tr>
+</table>
+
+<p><code>Q_wall</code> 由能量平衡反算：
+<code>Q = ṁ·cp·(T_in − T_out) + ṁ_cond·h_fg</code>（SOP §8.1 口径，
+优于直接读壁面热流，因定温壁的法向热流受离散误差影响大）。
+合理性校核会自动执行：凝液量不应超过入口带进来的水蒸气量
+（ṁ<sub>H2O,in</sub> = 5.78e-07 kg/s）。</p>
+
+<h3>4.3 当前实测输出</h3>
+<pre>排名  结构    ṁ_cond(kg/s)   Y_H2O_out   T_out(K)   Q_wall(W)   Δp(Pa)   校核
+1     v8_1     0              0.0289      308.15     0           0        </pre>
+<p class="sub">仅 t=0 初值——尚无推进后的真实结果。<code>cases/</code> 中其余 7 个结构
+连 <code>postProcessing/</code> 都没有。</p>
+
+<h2>五、剩余阻塞：第 2 个 PIMPLE 外循环 T 崩塌</h2>
+
+<h3>5.1 精确崩溃点</h3>
+<pre>第1 个 outer corrector：全部收敛
+    H2O.gas  1 → 0.0145
+    e.gas    1 → 0.0059        ← 极好
+    p_rgh    → 9.8e-8
+第2 个 outer corrector：残差"越迭代越差"
+    H2O.gas  0.958 → 0.024
+    e.gas    0.983 → 0.0189     ← 回升
+    e.liquid 0.977 → 0.0941     ← 未收敛
+    ↓ 立即进入 correctThermo
+    janafThermo::limit：T = 130.4 / 125.0 / 154.6 / 150.3 / 55.8 / 47.1 K
+    → 超出合法范围 200~3500 → FOAM FATAL</pre>
+
+<h3>5.2 已排除的假设（12 组对照探针实测）</h3>
+<table>
+<tr><th>假设</th><th>探针</th><th>结果</th></tr>
+<tr><td>冷壁 5℃ 热冲击</td><td>Q3 冷壁改 <code>zeroGradient</code></td><td class="ok">排除（仍崩，68 警告）</td></tr>
+<tr><td><code>alpha.liquid</code> 太稀疏</td><td>Q1 初值 1e-6 → 1e-3</td><td class="ok">排除（仍崩）</td></tr>
+<tr><td><code>fvSolution</code> 缺 PIMPLE 段</td><td>R0/R1 照抄教程 PIMPLE</td><td class="ok">非主因（警告 66→12 仍崩）</td></tr>
+<tr><td>相变焓基准不匹配</td><td>T1 改液相 <code>Hf</code></td><td class="ok">修正方向错（警告 66→206）</td></tr>
+<tr><td>网格质量</td><td><code>checkMesh</code></td><td class="ok">排除（Mesh OK）</td></tr>
+</table>
+
+<h3>5.3 并存疑点（指向相模型配置与官方参照系不兼容）</h3>
+<div class="card">
+<p><b>① 相变焓基准不一致</b><br>
+气相 janaf <code>lowCpCoeffs</code> 第 6 项 = <code>-30293.7</code>（J/mol 量级，
+折合 −1.682e6 J/kg），而液相 <code>Hf = -1.5879e7</code> J/kg。
+两者基准差约 <b>322 倍</b>相变潜热量级。直接改液相 Hf 会更糟（T1 已实测），说明需要
+同时校正两侧——这不是单点改动。</p>
+<p><b>② 液相模型与官方教程不一致</b><br>
+官方 <code>bubbleColumnEvaporatingDissolving</code> 用
+<code>multiComponentPhaseModel</code> + <code>interfaceComposition.liquid</code> 的
+Henry 定律段（空气溶于水）；我们用 <code>purePhaseModel</code> + 空
+<code>interfaceComposition.liquid()</code>。直接切换会报
+<code>air not found in table</code>（液相无 air 组分），需连带补齐液相组分物性。</p>
+</div>
+
+<h3>5.4 参照系与建议路径</h3>
+<div class="card">
+官方教程 <code>bubbleColumnEvaporatingDissolving</code> 在本机<b>可长时间稳定推进</b>
+（实测已跑到 t=13 以上，12+ 个时间步全部完成，持续 15 分钟无崩溃）——证明
+blueCFD 环境、求解器、浮点设置均无问题，问题<b>只在我们的相模型配置</b>。<br><br>
+<b>建议</b>：以官方教程为参照系，把
+<code>thermophysicalProperties.liquid</code> + <code>phaseProperties</code>
+的相模型部分<b>整体对齐</b>（而非逐点打补丁），再逐项换回我们的物理参数
+（冷壁 278.15 K、入口 308.15 K、Y<sub>H2O</sub>=0.0289）。
+逐点试错已证明效率低且易引入新错误（本次 12 组探针仅定位到"排除项"）。
+</div>
+
+<div class="card">
+<b>配套工具</b>：本次诊断经验已固化为 <code>tools/ablate.py</code>——
+单因素对照探针运行器。以后遇到发散/崩溃，先用它做归因，而不是靠猜：<br>
+<pre style="margin:8px 0 0">python tools/ablate.py --list
+python tools/ablate.py baseline every_step --endtime 0.02</pre>
+输出汇总表（rc / 步数 / janaf 警告数 / 各方程末残差 / FATAL 原因），
+<code>every_step</code> 探针还能在崩溃前抢先把场统计落盘（唯一可靠的数据来源，
+因为求解器崩在写盘之前）。
+</div>
+
+<h2>六、两个目录的交付状态</h2>
+
+<table>
+<tr><th></th><th><code>case/</code>（单结构 v8_1）</th><th><code>cases/</code>（8 结构对比）</th></tr>
+<tr><td>网格</td><td class="ok">已重建，Mesh OK</td><td class="bad">需重建（8 个全违规）</td></tr>
+<tr><td>字典</td><td class="ok">已重建，可被 OF8 解析</td><td>可用但基于违规网格</td></tr>
+<tr><td>首步收敛</td><td class="ok">✔</td><td>—（网格先要重建）</td></tr>
+<tr><td>连续推进</td><td class="bad">✘ 第2 外循环 FATAL</td><td class="bad">✘ 阻塞在字典层，与网格无关</td></tr>
+<tr><td>可用结果</td><td>6 个指标管线就绪，等阻塞解除</td><td class="bad">当前跑不出任何对比结果</td></tr>
+</table>
+
+<div class="card">
+<b>关键判断</b>：<code>cases/</code> 的 8 个结构<b>重建网格也不会产生结果</b>——
+因为阻塞位于相模型/热物性字典层面，与网格无关。当前最有效的单点突破是
+<b>把相模型配置整体对齐官方教程</b>，而不是继续重建网格。
+</div>
+
+</div>
+</body>
+</html>

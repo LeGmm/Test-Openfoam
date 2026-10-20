@@ -1,0 +1,139 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  8                                     |
+|   \\  /    A nd           | Website:  https://openfoam.org                  |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     chtMultiRegionFoam;
+
+// 2026-10-20 16:30 续跑：从 400 接着算到 1400（400 步时能量平衡还差 2.8 倍，未收敛）
+// 收敛判据：Q_interface 与 ṁ·cp·(T_in−T_out)_质量加权 比值进 (0.95, 1.05)，且 h 残差 < 1e-5
+startFrom       latestTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         15000;            // 2026-10-20 23:30 续算：9000 步能量比 1.080，目标 <1.05
+
+deltaT          1;
+
+writeControl    timeStep;
+
+writeInterval   50;
+
+purgeWrite      0;
+
+writeFormat     ascii;
+
+writePrecision  8;
+
+writeCompression off;
+
+timeFormat      general;
+
+timePrecision   6;
+
+runTimeModifiable true;
+
+maxCo           1.0;
+
+maxDi           10.0;
+
+adjustTimeStep  no;
+
+// ---- Step 1 验证指标（跑完用 python 对 postProcessing 做质量/能量守恒核对）----
+// 多区域算例必须写 region fluid;（regionFunctionObject 默认找 region0 会 FATAL）
+functions
+{
+    // 进出口质量流率 kg/s（ρConst 单相，sum(phi) 即质量流率）
+    m_in
+    {
+        type            surfaceFieldValue;
+        region          fluid;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        writeFields     no;
+        regionType      patch;
+        name            inlet;
+        operation       sum;
+        fields          ( phi );
+    }
+    m_out
+    {
+        $m_in;
+        name            outlet;
+    }
+
+    // 进出口温度（面积平均）→ 显热吸热 = m·cp·(T_out−T_in)
+    T_in
+    {
+        type            surfaceFieldValue;
+        region          fluid;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        writeFields     no;
+        regionType      patch;
+        name            inlet;
+        operation       areaAverage;
+        fields          ( T );
+    }
+    T_out
+    {
+        $T_in;
+        name            outlet;
+    }
+
+    // 流固界面上流体侧吸热 W（wallHeatFlux 的 patch 积分输出）
+    Q_interface
+    {
+        type            wallHeatFlux;
+        region          fluid;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        patches         ( interface );
+    }
+
+    // ---- 2026-10-20 新增：能量平衡判据用（质量加权温度 + 固体侧热流）----
+    // 进出口温度【质量/通量加权】——能量守恒只能用通量加权，面积平均会因速度不均失真
+    T_in_mw
+    {
+        type            surfaceFieldValue;
+        region          fluid;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        writeFields     no;
+        regionType      patch;
+        name            inlet;
+        operation       weightedAverage;
+        weightField     phi;
+        fields          ( T );
+    }
+    T_out_mw
+    {
+        $T_in_mw;
+        name            outlet;
+    }
+
+    // 固体侧热流 W：interface（进）/ coldWall（出）/ outer（应≈0，绝热校核）
+    Q_solid
+    {
+        type            wallHeatFlux;
+        region          solid;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+    }
+}
+
+// ************************************************************************* //

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenFOAM 冷凝仿真 — 期刊可用性与结果可信度审计</title>
+<style>
+  :root{
+    --bg:#0f1419; --panel:#1a212b; --panel2:#212b38; --ink:#e6edf3; --sub:#9fb0c0;
+    --line:#2d3a47; --acc:#4da3ff; --ok:#3fb950; --warn:#e3b341; --bad:#f85149;
+    --mono:"Cascadia Code","Consolas",monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.75 "Microsoft YaHei","PingFang SC",sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 28px 80px}
+  h1{font-size:27px;line-height:1.4;margin:0 0 8px}
+  h2{font-size:21px;margin:44px 0 14px;padding-left:12px;border-left:4px solid var(--acc)}
+  h3{font-size:17px;margin:26px 0 10px;color:var(--acc)}
+  p{margin:10px 0}
+  .meta{color:var(--sub);font-size:13.5px;margin-bottom:26px}
+  .verdict{background:linear-gradient(135deg,#1c2733,#22303e);border:1px solid var(--line);
+    border-radius:12px;padding:22px 26px;margin:22px 0}
+  .verdict .big{font-size:19px;font-weight:700;margin-bottom:8px}
+  .tag{display:inline-block;padding:2px 11px;border-radius:20px;font-size:12.5px;
+    font-weight:700;margin-right:8px;vertical-align:middle}
+  .tag.ok{background:rgba(63,185,80,.16);color:var(--ok);border:1px solid rgba(63,185,80,.4)}
+  .tag.warn{background:rgba(227,179,65,.14);color:var(--warn);border:1px solid rgba(227,179,65,.4)}
+  .tag.bad{background:rgba(248,81,73,.14);color:var(--bad);border:1px solid rgba(248,81,73,.45)}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);font-weight:700}
+  tr:nth-child(even) td{background:rgba(255,255,255,.018)}
+  code{font-family:var(--mono);background:#16202b;border:1px solid var(--line);
+    border-radius:4px;padding:1px 6px;font-size:13px}
+  pre{background:#121a23;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+    overflow-x:auto;font-family:var(--mono);font-size:12.8px;line-height:1.65}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:760px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+  .card h4{margin:0 0 8px;font-size:15px}
+  .num{font-family:var(--mono);font-size:15px}
+  .small{font-size:13px;color:var(--sub)}
+  ul,ol{padding-left:22px}
+  li{margin:6px 0}
+  .callout{border-left:4px solid var(--warn);background:rgba(227,179,65,.07);
+    padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .callout.bad{border-color:var(--bad);background:rgba(248,81,73,.07)}
+  .callout.ok{border-color:var(--ok);background:rgba(63,185,80,.07)}
+  .bar{height:22px;border-radius:4px;overflow:hidden;display:flex;font-size:11.5px;
+    font-family:var(--mono);color:#0d1117;font-weight:700;margin:6px 0}
+  .bar div{display:flex;align-items:center;justify-content:center;white-space:nowrap}
+  .foot{margin-top:56px;padding-top:18px;border-top:1px solid var(--line);
+    color:var(--sub);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>OpenFOAM 冷凝仿真<br>期刊可用性与结果可信度审计</h1>
+<div class="meta">
+项目：F:\B_Simulation\fangzhen-3\OpenFOAM ｜ 审计对象：两步共轭冷凝管线（caseCHT_qishi + case_qishi，结构 v8_1）<br>
+求解器：blueCFD-Core / OpenFOAM 8（chtMultiRegionFoam + multiphaseEulerFoam）｜
+审计时间：2026-10-20 ｜ 全部数字取自本机磁盘实测（日志、postProcessing 数据文件、CSV）
+</div>
+
+<div class="verdict">
+  <div class="big">总体判定：方法学可写入 Materials &amp; Methods；结果目前<b style="color:var(--warn)">不能</b>写入 Results。</div>
+  <p style="margin:6px 0 10px">
+  <span class="tag ok">方法学：成立</span>
+  <span class="tag warn">Step1：物理合理但未收敛</span>
+  <span class="tag bad">Step2：零有效结果</span>
+  <span class="tag bad">8 结构对比：尚不存在</span>
+  </p>
+  <p style="margin:0" class="small">
+  你最担心的"结果有 bug"——审计结论是：<b>历史上确实存在过 7 个真实的配置级 bug（均已定位并修复）</b>，
+  当前代码管线本身没有发现数值错误；但当前最大的问题不是 bug，而是<b>Step1 未严格收敛</b>
+  （能量平衡差 2.8 倍）与 <b>Step2 在 0.25 毫秒处崩溃、没有任何可用结果</b>。
+  以现状直接写论文 Results 会出问题；按本文第 7 节清单补齐后可以。
+  </p>
+</div>
+
+<h2>一、这个实验实现了什么功能</h2>
+<p>
+把湿空气冷凝从 Fluent 的 <code>Lee 经验模型</code> 移植到 OpenFOAM，构建了一条<b>两步共轭传热 + 冷凝</b>管线，
+用于比较不同冷凝器几何结构的冷凝效果：
+</p>
+<table>
+<tr><th>环节</th><th>求解器 / 工具</th><th>做什么</th><th>物理意义</th></tr>
+<tr><td><b>Step 0</b> 转换 + 门禁</td><td><code>fluent_cas_to_foam_cht.py</code> / <code>preflight.py</code></td>
+<td>Fluent cas.h5 → fluid+solid 双区域 polyMesh；10 项开跑前检查</td>
+<td>保证网格/字典/耦合边界在起跑前合规</td></tr>
+<tr><td><b>Step 1</b> 共轭传热</td><td><code>chtMultiRegionFoam</code></td>
+<td>流体（湿空气）+ 固体（铝，含空腔）稳态共轭传热；仅冷板定 278.15 K</td>
+<td>算出<b>真实的流固界面温度分布</b> T_int(x)——不是把界面拍成 5℃ 一刀切</td></tr>
+<tr><td><b>Step 1.5</b> 提取/校验</td><td><code>map_interface_T.py extract/verify</code></td>
+<td>提取 9459 个界面面心温度；同网格一致性 gate</td>
+<td>保证映射不串位（实测偏差 0.000001 mm）</td></tr>
+<tr><td><b>Step 2</b> 冷凝相变</td><td><code>multiphaseEulerFoam</code></td>
+<td>T_int 映射为 coldWall 非均匀边界；气液双流体 + 界面组分相变</td>
+<td>水蒸气经<b>不凝气体（空气）Stefan 扩散</b>到界面凝结——含不凝气体冷凝的物理正确做法</td></tr>
+<tr><td><b>Step 3</b> 指标对比</td><td><code>compare.py</code></td>
+<td>ṁ_cond / Y_H2O_out / T_out / Q_wall / Δp 五指标</td>
+<td>定量排名 8 个结构的冷凝效率</td></tr>
+</table>
+
+<h3>方法学上做对的地方（这些是论文的卖点）</h3>
+<ul>
+<li><b>冷源位置正确</b>：wall_cool（5℃ 面）是<b>固体外表面</b>而非流固界面。早期方案把界面直接定 5℃ 属于过度冷却、
+冷源悬空——该方案已否决并改为两步共轭。这是本项目在物理建模上最重要的修正。</li>
+<li><b>相变模型更先进</b>：Fluent Lee 模型是温度驱动经验式（需标定频率系数 β）；本项目用界面饱和
+（ArdenBuck）+ 不凝气体扩散（Stefan 流），直接对应 SOP 强调的"不凝气体扩散阻力"，无需标定系数。</li>
+<li><b>可测指标设计正确</b>：ṁ_cond（凝液质量流率）、Y_H2O_out（出口含湿）、Q_wall（冷壁换热）、Δp
+正是衡量冷凝器性能的标准量，且配了守恒校核（质量 &lt;2%、能量闭合）。</li>
+</ul>
+
+<h2>二、结果是否可靠？—— 分项审计</h2>
+
+<h3>2.1 Step1（共轭传热）：物理正确，但<b style="color:var(--warn)">未严格收敛</b></h3>
+<div class="callout ok">
+<b>已验证通过的：</b>质量守恒 m_in = m_out = 1.99985×10⁻⁵ kg/s（8 位有效数字一致）；
+界面温度梯度物理合理（冷板在 +z，z=+20mm 处 280.4K → z=−20mm 处 297.9K，单调）；
+T_int 提取 verify PASS（9459↔9459 面心重合）；preflight 门禁 PASS。
+</div>
+
+<div class="callout bad">
+<b>核心问题：能量平衡没有闭合。</b>按控制体定律，稳态时必须满足
+ṁ·cp·(T_in−T_out) = Q_interface。实测（取自 <code>postProcessing/fluid/</code> 数据文件）：
+</div>
+
+<table>
+<tr><th>外迭代</th><th>T_out (K)</th><th>流体侧焓变 Q=ṁ·cp·ΔT (W)</th><th>界面热流积分 Q_int (W)</th><th>比值（应→1）</th></tr>
+<tr><td>200</td><td>302.19</td><td>0.120</td><td>0.757</td><td class="num">6.31</td></tr>
+<tr><td>250</td><td>301.14</td><td>0.141</td><td>0.666</td><td class="num">4.72</td></tr>
+<tr><td>300</td><td>300.19</td><td>0.160</td><td>0.608</td><td class="num">3.79</td></tr>
+<tr><td>350</td><td>299.33</td><td>0.178</td><td>0.571</td><td class="num">3.21</td></tr>
+<tr><td><b>400（截止）</b></td><td><b>298.55</b></td><td><b>0.193</b></td><td><b>0.547</b></td><td class="num" style="color:var(--warn)"><b>2.83</b></td></tr>
+</table>
+<p class="small">
+（ṁ=2.0×10⁻⁵ kg/s，cp=1006 J/(kg·K)；Q_int 取 wallHeatFlux 的 integral 列 [W]。
+趋势在收敛但很慢：比值每 50 次迭代只降 ~15%，能量残差还有 2.8 倍。）
+</p>
+<ul>
+<li>同时 <b>h 方程初始残差 = 9.7×10⁻⁴</b>，未达 10⁻⁶ 量级判据；T_out 每 50 次迭代仍漂移 0.8 K。</li>
+<li>controlDict 注释写"已收敛"、README 写"Step1 完成"——<b>按能量守恒判据这两处表述都应修正</b>。
+400 次是配置的 endTime，不是收敛触发的终止。</li>
+<li>后果：映射给 Step2 的 T_int 是<b>暂定场</b>。界面均值 291.5 K，若继续迭代，界面还会整体降温
+（T_out 理论极限约 283 K 量级），结露面积比例会变。</li>
+</ul>
+
+<h3>2.2 Step2（冷凝）：<b style="color:var(--bad)">没有任何有效结果</b></h3>
+<div class="callout bad">
+两次运行全部崩溃，<code>case_qishi/</code> 目录下<b>没有任何时间目录</b>（0/ 之外什么都没写出来）。
+<code>comparison.csv</code> 里 v8_1 那一行（mdot_cond=0.0, Q_wall=0.0）是 t=0 初始值，
+不是仿真结果——把它当成"凝液量为零"是误读。
+</div>
+<table>
+<tr><th>运行</th><th>崩溃点</th><th>现象</th><th>性质</th></tr>
+<tr><td>log.step2</td><td>初始化阶段</td><td>janafThermo 反解温度 FATAL（迭代 100 次不收敛）</td>
+<td><span class="tag ok">已修复</span>热物性改为液相 multiComponent+Henry / 气相 eConst</td></tr>
+<tr><td>log.step2b</td><td><b>t = 2.53×10⁻⁴ s</b></td>
+<td>Co_max 从 0.3 暴冲到 <b>101612</b>，deltaT 崩到 7.5×10⁻¹⁰ s，sigFpe 浮点异常终止</td>
+<td><span class="tag bad">未解决</span>薄片单元刚性 + 相变刚性</td></tr>
+</table>
+<ul>
+<li>好消息：相变确实启动了——<code>alpha.liquid</code> 峰值 0.0065（0.65% 凝液生成），说明映射边界与相变模型在工作。</li>
+<li>坏消息：模拟只推进了 <b>0.25 毫秒</b>物理时间，而冷凝过程需要秒—分钟级；在这段时间尺度上
+凝液量、出口含湿、压降全都不可用。</li>
+<li>根因已定位且与"结果 bug"无关：进出口平面下方 <b>7625 个薄片单元</b>（V&lt;10⁻¹¹ m³，占流体 11.8%）
+把显式相变源项的稳定时间步压垮。</li>
+</ul>
+
+<h3>2.3 历史 bug 清单 —— 你担心的事确实发生过，但都已闭环</h3>
+<p class="small">下列每个都是<b>真实的 bug</b>，会造成"看起来在算、其实算错"的假结果。全部已定位并修复，附回归：</p>
+<table>
+<tr><th>#</th><th>bug</th><th>会造成什么假象</th><th>状态</th></tr>
+<tr><td>1</td><td>网格内部面 owner 未归一化 + 未按 (owner,neighbour) 字典序</td>
+<td>checkMesh 报 12.7 万个面乱序；旧 case/ 目录字典缺 version 项，<b>从未真正运行过</b></td><td><span class="tag ok">已修</span></td></tr>
+<tr><td>2</td><td>共轭边界两侧写 zeroGradient（且补丁名不同配不上对）</td>
+<td><b>Q_interface ≡ 0</b>——热量根本没传，而质量守恒"看起来"正常</td><td><span class="tag ok">已修</span></td></tr>
+<tr><td>3</td><td><code>0/fluid/p</code> internalField 写 101325 而非 0</td>
+<td>h=e+p/ρ 导致 <b>温度假升 +88 K</b></td><td><span class="tag ok">已修</span></td></tr>
+<tr><td>4</td><td>Step2 热物性 janaf（生成器默认）</td><td>求解器必 FATAL，根本跑不起来</td><td><span class="tag ok">已修</span></td></tr>
+<tr><td>5</td><td>relaxationFactors 误放进 PIMPLE 块</td><td>被<b>静默忽略</b>，欠松弛失效直接发散</td><td><span class="tag ok">已修</span></td></tr>
+<tr><td>6</td><td>controlDict 残留 <code>startFrom latestTime</code></td>
+<td>重跑从 400 步"直接结束"，<b>看起来成功其实没算</b></td><td><span class="tag ok">已修</span></td></tr>
+<tr><td>7</td><td>surfaces FO 字段含 U/p_rgh（固体区没有）</td>
+<td>固体切片失败却留下旧 vtk <b>冒充新结果</b></td><td><span class="tag ok">已修</span></td></tr>
+</table>
+<div class="callout">
+<b>对 bug 问题的直接回答：</b>管线当前版本经 22 个脚本编译自检 + preflight 10 项门禁 + 教程网格端到端回归
+（heatedDuct→bubbleColumn 160 步零 FATAL），<b>没有发现未修复的数值错误</b>。
+但要注意两点：① 上表 #2/#6/#7 都曾产生"假成功"，说明<b>只看求解器正常退出是不够的</b>，
+必须用能量/质量守恒判据核对（这正是 2.1 节暴露 Step1 未收敛的方法）；
+② 早前 README 宣称"Step1 已验证"实际只验了质量守恒，共轭传热当时并没生效——这类<b>过早的验证声明</b>
+比代码 bug 更危险，本次已一并纠正。
+</div>
+
+<h2>三、仿真结果有什么意义</h2>
+
+<h3>3.1 Step1 界面温度场——已经能说明结构问题</h3>
+<p>对 v8_1，9459 个界面面的温度分布（数据：<code>_interface_T_qishi.csv</code>）：</p>
+<div class="card">
+<h4>界面温度构成（可结露判据：低于约 283 K，即 T_c=5℃ + 过冷度）</h4>
+<div class="bar">
+  <div style="width:20.5%;background:#4da3ff">有效结露区 20.5%</div>
+  <div style="width:20.7%;background:#6f7f8f">过渡 283–293K 20.7%</div>
+  <div style="width:58.8%;background:#e3b341">&gt;20℃ 不结露 58.8%</div>
+</div>
+<table style="margin-top:10px">
+<tr><th>温度区间</th><th>面数</th><th>占比</th><th>含义</th></tr>
+<tr><td>278.2 – 283 K（5–10℃）</td><td>1938</td><td class="num">20.5%</td><td>有效结露区，集中在 z ≥ +15 mm 冷板侧</td></tr>
+<tr><td>283 – 293 K（10–20℃）</td><td>1958</td><td class="num">20.7%</td><td>过渡区，弱结露</td></tr>
+<tr><td>≥ 293.15 K（&gt;20℃）</td><td>5563</td><td class="num">58.8%</td><td><b>理论上不结露</b>（高于露点）</td></tr>
+</table>
+<p class="small">z 向分布（5mm 分箱平均）：z=+20mm → 280.4 K（84% 可结露）｜z=+15mm → 284.1 K｜
+z=0 → 295.0 K｜z=−20mm → 297.9 K（0% 可结露）。</p>
+</div>
+<p><b>科学意义</b>：这组数字本身就是结构冷凝效率的诊断——v8_1 有 <b>近 6 成换热面根本不结露</b>，
+有效冷表面利用率只有 20%。也就是说，该结构的冷量没有被充分"铺开"，冷板只影响了 +z 端。
+这对"冷凝器结构对比"是核心论据之一，而且这一步<b>不依赖 Step2</b>，可以先写。</p>
+
+<h3>3.2 若 Step2 跑通，能得到什么</h3>
+<ul>
+<li><b>ṁ_cond</b>：凝液质量流率——冷凝效果的直接度量，结构间可比；</li>
+<li><b>Y_H2O_out</b>：出口水蒸气质量分数——除湿效率；</li>
+<li><b>Q_wall</b>：冷壁换热量——与潜热释放配平做能量闭合校核；</li>
+<li><b>Δp</b>：压降——代价侧指标（换热 vs 流阻）；</li>
+<li>凝液空间分布（alpha.liquid 场）——看膜状/滴状、是否沿 −Y 重力排出。</li>
+</ul>
+
+<h2>四、能否衡量冷凝器结构对应的冷凝效果</h2>
+<table>
+<tr><th>维度</th><th>判定</th><th>依据</th></tr>
+<tr><td>方法学上能不能</td><td><span class="tag ok">能</span></td>
+<td>指标设计正确；两步共轭抓住了"固体导热路径 → 界面温度分布 → 局部结露"这条结构敏感链路；
+相变模型含不凝气体扩散阻力，物理上比 Lee 经验式更站得住</td></tr>
+<tr><td>现在拿数据能不能</td><td><span class="tag bad">不能</span></td>
+<td>Step2 零有效结果；仅 v8_1 一个结构跑了 Step1 且未收敛；其余 7 个结构未开始；
+comparison.csv 现有行是初始值不是结果</td></tr>
+<tr><td>补完工作后能不能</td><td><span class="tag ok">能</span></td>
+<td>障碍是数值稳定性（薄片单元 + 相变刚性），属可解决的工程问题，不是方法学死路</td></tr>
+</table>
+
+<h3>已知会干扰结构对比的缺陷（写论文必须披露）</h3>
+<ol>
+<li><b>单向耦合</b>：凝液潜热不反馈固体温度。对凝液量大的工况会低估界面温度回升，
+必要时用 Step2 的 Q_wall 反代 Step1 迭代一次。</li>
+<li><b>v8_12 / v8_13 / v8_14 有无网格空腔</b>（两块 2mm 板间 17mm 间隙无气体无固体，两壁各 13.34 cm²
+互不耦合）——这是 CAD/设计层面缺陷，会在共轭热路里真实呈现为断路，三个结构的对比要单独说明。</li>
+<li><b>薄片单元层</b>（各结构均有，v8_1 为 7625 个 / 11.8%）：既是 Step2 崩溃根源，也是 Step1 局部
+q 高达 4.6 kW/m² 的来源，网格无关性研究必须做。</li>
+<li><b>铰链 pinch</b>（1 对单元共棱双面）：已定性为合法拓扑、不阻塞守恒，保留不动；论文中可一句带过。</li>
+<li><b>Euler 分散相模型近似膜状冷凝</b>：对液膜形态是近似；只比"量"可接受，比"膜厚/形态"需转 VOF。</li>
+<li><b>无实验验证、无网格无关性（GCI）</b>——期刊审稿人必问的两项，目前都缺。</li>
+</ol>
+
+<h2>五、期刊论文怎么写（建议口径）</h2>
+<table>
+<tr><th>论文部分</th><th>现在能不能写</th><th>建议口径</th></tr>
+<tr><td><b>Materials &amp; Methods</b><br>（模型、求解器、边界、两步法）</td>
+<td><span class="tag ok">可以写</span></td>
+<td>两步共轭 + 界面组分相变的方法学完整、有创新点（不凝气体 Stefan 扩散 + 真实固体导热路径）。
+写明六条局限（第 4 节）。方法学描述本身不依赖未收敛的结果</td></tr>
+<tr><td><b>Results</b>：Step1 界面温度分布</td>
+<td><span class="tag warn">补收敛后可写</span></td>
+<td>必须先把能量平衡闭合到 &lt;5%、h 残差降到 1e-6 量级（约再几百次外迭代），
+再加网格无关性。现值（58.8% 不结露等）方向正确但数字会微调</td></tr>
+<tr><td><b>Results</b>：冷凝量与结构对比</td>
+<td><span class="tag bad">现在不能写</span></td>
+<td>Step2 没有结果。不能用 t=0 初始值或 0.25ms 的瞬态冒充</td></tr>
+<tr><td><b>Discussion</b>：结构优劣结论</td>
+<td><span class="tag bad">现在不能写</span></td>
+<td>需要 ≥2 个结构的完整五指标对比才谈得上"对比"</td></tr>
+</table>
+
+<div class="callout bad">
+<b>底线建议：</b>如果目标期刊必须有冷凝量结果，本项目<b>现在不具备投稿条件</b>。
+如果可以先投方法学/共轭传热分析（或作为全文的前半部分），Step1 补收敛后是够格的。
+切勿把 comparison.csv 现有内容写进论文——那是初始条件。
+</div>
+
+<h2>六、距离"可投稿"还差什么（按优先级）</h2>
+<ol>
+<li><b>P0 — Step1 跑到真收敛</b>：endTime 提到 1000+，监控能量平衡比值 →1（&lt;5%）与 h 残差 &lt;1e-6；
+用同一套 FO 出 Q_coldWall，做固体侧能量闭合（现在只有流体侧）。预计单次约 10 分钟量级。</li>
+<li><b>P0 — Step2 数值稳定</b>：三条路线任选其一——(a) 固定小时间步 1e-6 起步 + 局部限速；
+(b) 薄片层局部加密（Fluent 侧进出口面下加密一层，重导出）；(c) 相变源项亚松弛/限幅。
+目标：推进到秒级、ṁ_cond 与 Y_H2O_out 出稳态平台。</li>
+<li><b>P1 — 至少 3 个结构跑通全流程</b>（建议 v8_1 / v8_8 / v8_12，避开空腔缺陷先做干净对比，空腔结构单独讨论）。</li>
+<li><b>P1 — 网格无关性（GCI）</b>：冷壁与相变区加密一档，两套网格指标差 &lt;5%。</li>
+<li><b>P2 — 单向耦合补偿</b>：用 Step2 的 Q_wall 反代 Step1 冷壁热流迭代一次，量化潜热反馈误差。</li>
+<li><b>P2 — 若期刊要求</b>：实验对标（哪怕一组工况的 ṁ_cond 或 T_out）。</li>
+</ol>
+
+<h2>七、证据索引（可复查）</h2>
+<table>
+<tr><th>结论</th><th>证据文件</th></tr>
+<tr><td>质量守恒、T_out、Q_interface 数值</td><td><code>caseCHT_qishi/postProcessing/fluid/{m_in,m_out,T_in,T_out,Q_interface}/200/</code></td></tr>
+<tr><td>Step1 残差与迭代过程</td><td><code>caseCHT_qishi/log.steady5</code>（Time=400，End，h 残差 9.7e-4）</td></tr>
+<tr><td>Step2 两次崩溃</td><td><code>case_qishi/log.step2</code>（janaf FATAL）、<code>log.step2b</code>（Co=101612，t=2.53e-4s，sigFpe）</td></tr>
+<tr><td>Step2 无时间目录 / 指标为 t=0 值</td><td><code>case_qishi/</code>（仅 0/ constant/ system/）、<code>postProcessing/*/0/</code></td></tr>
+<tr><td>界面温度分布与结露比例</td><td><code>_interface_T_qishi.csv</code>（9459 行）、<code>case_qishi/0/T.gas</code> coldWall 非均匀值</td></tr>
+<tr><td>映射一致性</td><td><code>map_interface_T.py verify</code> PASS（9459↔9459，0.000001 mm）</td></tr>
+<tr><td>开跑门禁</td><td><code>tools/preflight.py</code>：caseCHT_qishi / case_qishi 均 PASS（1 WARN 铰链）</td></tr>
+<tr><td>历史 bug 与修复</td><td><code>代码审计报告_2026-10-20.html</code>（11 项已修）、<code>仿真能力评估报告.html</code>（网格朝向 bug）</td></tr>
+<tr><td>流场可视化</td><td><code>Step1_z0_温度流场_QiShi_v8_1.png</code>、<code>Step1_界面温度分布_QiShi_v8_1.png</code></td></tr>
+</table>
+
+<div class="foot">
+审计方法：直接读取求解日志、postProcessing 数据文件与 CSV 重新计算守恒量，不采信文档表述。
+能量平衡用 ṁ=1.99985×10⁻⁵ kg/s、cp=1006 J/(kg·K)（取自 caseCHT_qishi/constant/fluid/thermophysicalProperties）复算。<br>
+一句话总结：<b style="color:var(--ink)">方法学可信、管线无未修 bug，但 Step1 未收敛、Step2 无结果——
+现阶段可写 Materials &amp; Methods，不可写 Results；补齐第 6 节 P0 两项后即可达到期刊数据标准。</b>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,105 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  8                                     |
+|   \\  /    A nd           | Website:  https://openfoam.org                  |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+application     multiphaseEulerFoam;
+
+startFrom       startTime;
+startTime       0;
+stopAt          endTime;
+endTime         0.01;        // 稳定性验证目标：推进到 10 ms（旧崩溃点 0.253 ms 的 40 倍）
+deltaT          2e-6;        // 固定小步长：自适应 dt 在相变刚性面前会崩到 7.5e-10（log.step2b）
+                             // dt=2e-6 对应旧工况 Co_max≈0.002，安全裕度充分
+writeControl    adjustableRunTime;
+writeInterval   0.002;
+purgeWrite      0;
+writeFormat     ascii;
+writePrecision  10;
+writeCompression off;
+timeFormat      general;
+timePrecision   6;
+runTimeModifiable yes;
+adjustTimeStep  no;          // 固定步长（相变刚性阶段不让控制器压 dt）
+maxCo           0.3;
+maxDeltaT       0.01;
+
+functions
+{
+    // ---- ① 出口凝液质量流率 ṁ_cond  kg/s ----
+    // alphaRhoPhi.liquid = 液相【质量】通量 (alpha*rho*phi)，对 outlet 求和直接就是 kg/s。
+    // （注意不可用 alphaPhi.liquid —— 那是体积通量，量纲是 m³/s）
+    mdot_cond
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        writeFields     no;
+        regionType      patch;
+        name            outlet;
+        operation       sum;
+        fields          ( alphaRhoPhi.liquid );
+    }
+
+    // ---- ② 出口水蒸气质量分数（面积平均，气相侧）----
+    YH2O_out
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        writeFields     no;
+        regionType      patch;
+        name            outlet;
+        operation       areaAverage;
+        fields          ( H2O.gas );
+    }
+
+    // ---- ③ 出口温度（用于能量平衡反算 Q_wall）----
+    T_out
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        writeFields     no;
+        regionType      patch;
+        name            outlet;
+        operation       areaAverage;
+        fields          ( T.gas );
+    }
+
+    // ---- ④ 压降：入口 / 出口 面积平均压力 ----
+    p_in
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        writeFields     no;
+        regionType      patch;
+        name            inlet;
+        operation       areaAverage;
+        fields          ( p );
+    }
+    p_out
+    {
+        type            surfaceFieldValue;
+        libs            ("libfieldFunctionObjects.so");
+        writeControl    writeTime;
+        writeFields     no;
+        regionType      patch;
+        name            outlet;
+        operation       areaAverage;
+        fields          ( p );
+    }
+}

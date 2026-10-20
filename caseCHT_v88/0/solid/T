@@ -1,0 +1,51 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  8                                     |
+|   \\  /    A nd           | Website:  https://openfoam.org                  |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0/solid";
+    object      T;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dimensions      [0 0 0 1 0 0 0];
+
+internalField   uniform 300;
+
+boundaryField
+{
+    #includeEtc "caseDicts/setConstraintTypes"
+
+    coldWall
+    {
+        // TEC 冷面定温：唯一 5℃ 面（对应 Fluent wall_cool）
+        type            fixedValue;
+        value           uniform 278.15;
+    }
+    outer
+    {
+        type            zeroGradient;
+    }
+
+
+
+
+
+
+    interface
+    {
+        type            compressible::turbulentTemperatureCoupledBaffleMixed;
+        neighbourFieldName T;
+        Tnbr            T;
+        value           $internalField;
+    }
+}
+
+// ************************************************************************* //

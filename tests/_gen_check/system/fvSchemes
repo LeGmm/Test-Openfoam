@@ -1,0 +1,62 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  8                                     |
+|   \\  /    A nd           | Website:  https://openfoam.org                  |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+ddtSchemes
+{
+    default         Euler;
+}
+
+gradSchemes
+{
+    default         Gauss linear;
+}
+
+divSchemes
+{
+    // 兜底格式：upwind 稳定。真实项按 OpenFOAM 8 教程逐条给出。
+    default                         Gauss upwind;
+
+    // 注意：引号内的 key 是正则，括号必须转义为 \( \)，否则匹配不到真实项名
+    // （如 "div(phi,alpha.gas)"），会全部回落到 default 导致解析失败。
+    "div\(phi,alpha.*\)"           Gauss vanLeer;
+    "div\(phir,alpha.*\)"          Gauss vanLeer;
+
+    "div\(alphaRhoPhi.*,U.*\)"     Gauss limitedLinearV 1;
+    "div\(phi.*,U.*\)"             Gauss limitedLinearV 1;
+
+    "div\(alphaRhoPhi.*,Yi\)"      Gauss limitedLinear 1;
+    "div\(alphaRhoPhi.*,(h|e).*\)" Gauss limitedLinear 1;
+    "div\(alphaRhoPhi.*,K.*\)"     Gauss limitedLinear 1;
+    "div\(alphaPhi.*,p\)"          Gauss limitedLinear 1;
+
+    "div\(\(\(\(alpha.*\*thermo:rho.*\)*nuEff.*\)\*dev2\(T\(grad\(U.*\)\)\)\)\)" Gauss linear;
+}
+
+laplacianSchemes
+{
+    default         Gauss linear limited corrected 0.5;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         limited corrected 0.5;
+}

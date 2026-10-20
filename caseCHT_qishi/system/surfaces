@@ -1,0 +1,44 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  8
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      surfaces;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// 通用切片：只取 T，fluid / solid 两个区域都能跑
+//   postProcess -region fluid -func surfaces -latestTime
+//   postProcess -region solid -func surfaces -latestTime
+// 需要速度/压力时用 system/surfaces_flow（仅 fluid 有 U、p_rgh）
+
+type            surfaces;
+libs            ("libsampling.so");
+writeControl    writeTime;
+surfaceFormat   vtk;
+interpolationScheme cellPoint;
+fields          (T);
+
+surfaces
+(
+    z0
+    {
+        type            cuttingPlane;
+        planeType       pointAndNormal;
+        pointAndNormalDict
+        {
+            point       (0 0 0);
+            normal      (0 0 1);
+        }
+        interpolate     true;
+    }
+);
+
+// ************************************************************************* //

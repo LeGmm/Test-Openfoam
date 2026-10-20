@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Step1/Step2 说明与优化实做记录（2026-10-20）</title>
+<style>
+  :root{--bg:#0f1419;--panel:#1a212b;--panel2:#212b38;--ink:#e6edf3;--sub:#9fb0c0;
+    --line:#2d3a47;--acc:#4da3ff;--ok:#3fb950;--warn:#e3b341;--bad:#f85149;
+    --mono:"Cascadia Code","Consolas",monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:16px/1.75 "Microsoft YaHei","PingFang SC",sans-serif}
+  .wrap{max-width:1080px;margin:0 auto;padding:40px 28px 80px}
+  h1{font-size:26px;line-height:1.4;margin:0 0 8px}
+  h2{font-size:20px;margin:42px 0 14px;padding-left:12px;border-left:4px solid var(--acc)}
+  h3{font-size:16.5px;margin:24px 0 10px;color:var(--acc)}
+  p{margin:10px 0}
+  .meta{color:var(--sub);font-size:13.5px;margin-bottom:24px}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
+  th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel2)}
+  tr:nth-child(even) td{background:rgba(255,255,255,.018)}
+  code{font-family:var(--mono);background:#16202b;border:1px solid var(--line);
+    border-radius:4px;padding:1px 6px;font-size:13px}
+  pre{background:#121a23;border:1px solid var(--line);border-radius:8px;padding:14px 16px;
+    overflow-x:auto;font-family:var(--mono);font-size:12.8px;line-height:1.65}
+  .tag{display:inline-block;padding:2px 11px;border-radius:20px;font-size:12.5px;font-weight:700;margin-right:8px}
+  .tag.ok{background:rgba(63,185,80,.16);color:var(--ok);border:1px solid rgba(63,185,80,.4)}
+  .tag.warn{background:rgba(227,179,65,.14);color:var(--warn);border:1px solid rgba(227,179,65,.4)}
+  .tag.bad{background:rgba(248,81,73,.14);color:var(--bad);border:1px solid rgba(248,81,73,.45)}
+  .callout{border-left:4px solid var(--warn);background:rgba(227,179,65,.07);
+    padding:12px 16px;border-radius:0 8px 8px 0;margin:14px 0}
+  .callout.bad{border-color:var(--bad);background:rgba(248,81,73,.07)}
+  .callout.ok{border-color:var(--ok);background:rgba(63,185,80,.07)}
+  .small{font-size:13px;color:var(--sub)}
+  ul,ol{padding-left:22px}li{margin:6px 0}
+  .foot{margin-top:52px;padding-top:16px;border-top:1px solid var(--line);color:var(--sub);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Step1 / Step2 是什么，以及今天的两项优化<br>实做记录</h1>
+<div class="meta">
+项目：F:\B_Simulation\fangzhen-3\OpenFOAM ｜ 日期：2026-10-20 ｜ 结构：QiShi v8_1<br>
+全部数字取自本轮实跑（log.steady6~8 / log.step2c~e / log.noPC / postProcessing 数据文件）
+</div>
+
+<h2>一、Step1 与 Step2 是什么</h2>
+<p>把湿空气冷凝拆成两步，是因为<b>没有任何一个 OpenFOAM 求解器能同时算"固体导热 + 多相冷凝"</b>：
+multiphaseEulerFoam 不能带固体区，而 chtMultiRegionFoam 没有相变。于是：</p>
+<table>
+<tr><th></th><th>Step 1 共轭传热</th><th>Step 2 冷凝相变</th></tr>
+<tr><td><b>求解器</b></td><td><code>chtMultiRegionFoam</code></td><td><code>multiphaseEulerFoam</code></td></tr>
+<tr><td><b>算什么</b></td><td>湿空气（单相）+ 铝固体（含空腔）一起导热，
+只有 5℃ 冷板定温 278.15K，求出<b>流固界面的真实温度分布 T_int(x)</b></td>
+<td>气液两相湿空气冷凝：水蒸气经不凝气体（空气）Stefan 扩散到冷壁凝结，
+T_int 映射成冷壁的非均匀温度边界</td></tr>
+<tr><td><b>为什么必要</b></td><td>5℃ 冷板是<b>固体外表面</b>不是流固界面；把界面直接拍成 5℃
+会过度冷却、冷源悬空（早期方案已否决）</td>
+<td>相变模型比 Fluent Lee 经验式物理上正确（含不凝气体扩散阻力，无需标定系数）</td></tr>
+<tr><td><b>输出</b></td><td>T_int 场（9459 面）→ 映射给 Step2</td>
+<td>ṁ_cond / Y_H2O_out / T_out / Q_wall / Δp 五项冷凝指标</td></tr>
+</table>
+<p class="small">两步之间是<b>单向耦合</b>：凝液潜热不反馈 Step1 的固体温度（论文须披露；
+可用 Step2 的 Q_wall 反代迭代一次补偿）。</p>
+
+<h2>二、优化一：Step1 跑到真收敛</h2>
+
+<h3>2.1 加了什么</h3>
+<ul>
+<li><b>质量加权温度 FO</b>（T_in_mw / T_out_mw，phi 加权）：能量守恒核对必须用通量加权温度，
+原来的面积平均在速度不均时会失真；</li>
+<li><b>固体侧热流 FO</b>（Q_solid，region solid）：一次给出 interface / coldWall / outer 三行——
+outer≡0 通过绝热核对 ✓，interface 与流体侧配对核对 ✓；</li>
+<li>续跑 400 → 1400 → 3400 → 5400（在跑）次外迭代。</li>
+</ul>
+
+<h3>2.2 收敛轨迹（实测）</h3>
+<table>
+<tr><th>外迭代</th><th>能量比 Q_int / ṁ·cp·ΔT（应→1）</th><th>T_out 质量加权 (K)</th>
+<th>h 残差</th><th>Q_coldWall 固体侧 (W)</th></tr>
+<tr><td>400</td><td class="tag bad">2.83</td><td>—（当时只有面积平均 298.55）</td><td>9.7e-4</td><td>—（无 FO）</td></tr>
+<tr><td>1400</td><td class="tag warn">1.45</td><td>289.93</td><td>4.6e-4</td><td>-66.4</td></tr>
+<tr><td>3400</td><td class="tag warn">1.15</td><td>282.68</td><td>1.2e-4</td><td>-19.2</td></tr>
+<tr><td><b>5400（实测）</b></td><td class="tag warn"><b>1.098</b></td><td><b>280.46</b></td><td><b>3.2e-5</b></td><td><b>-6.07</b></td></tr>
+<tr><td>9000（在跑）</td><td class="tag ok">目标 &lt;1.05</td><td>~279.5</td><td>—</td><td>→ -0.61</td></tr>
+</table>
+<p class="small">
+界面两侧热流配对：流体侧 0.6118 W vs 固体侧 0.6127 W（差 0.15%）✓。
+固体侧 Q_coldWall 还在从 -6.07 W 衰减（固体余热排放），稳态值应等于 Q_interface ≈ 0.61 W——
+<b>固体热容量大、降温慢，是能量闭合滞后的主因</b>。T_int 已接近渐近值：
+t=5400 均值 278.81 K、全界面 278.15~279.49 K（离冷板 1.3K 以内）。
+</p>
+
+<h3>2.3 重要修正：撤回「58% 界面不结露」</h3>
+<div class="callout bad">
+昨天审计报告里"v8_1 有 58.8% 界面高于 20℃ 不结露、有效结露区仅 20.5%"——
+<b>这是未收敛产物，现予撤回</b>。随迭代推进界面整体降温：
+</div>
+<table>
+<tr><th>外迭代</th><th>T_int 均值 (K)</th><th>T_int 范围 (K)</th><th>&lt;283K 可结露占比</th><th>&gt;20℃ 占比</th></tr>
+<tr><td>400</td><td>291.54</td><td>278.15 ~ 299.32</td><td>20.5%</td><td>58.3%</td></tr>
+<tr><td>1400</td><td>285.27</td><td>278.15 ~ 291.88</td><td>29.3%</td><td>0%</td></tr>
+<tr><td>3400</td><td>280.26</td><td>278.15 ~ 282.51</td><td>100%</td><td>0%</td></tr>
+<tr><td><b>5400</b></td><td><b>278.81</b></td><td><b>278.15 ~ 279.49</b></td><td><b>100%</b></td><td><b>0%</b></td></tr>
+</table>
+<p>
+物理原因：<b>铝的导热系数 202 W/(m·K) 在这个尺度上把冷板温度"短接"到了全界面</b>。
+收敛后整个流固界面都在 278~283K（离冷源 5K 以内），理论上全表面可结露。
+结论方向完全反转：<b>冷凝效率的瓶颈不是冷面利用率，而是湿空气输运</b>（边界层、停留时间、
+流场组织）——这反而是更清晰的结构对比论据：结构差异应体现在"把湿空气送到冷面的能力"。
+</p>
+
+<h2>三、优化二：Step2 数值稳定</h2>
+
+<h3>3.1 做了什么（4 次实跑 + 1 次判别实验）</h3>
+<table>
+<tr><th>#</th><th>尝试</th><th>结果</th></tr>
+<tr><td>step2c</td><td>热启动（T/U/p_rgh 从 Step1 按单元映射）+ 固定小步长 dt=2µs</td>
+<td><span class="tag bad">崩溃</span>t=4µs 爆温 -0.9~1037K，Co→141</td></tr>
+<tr><td>step2d</td><td>+ 组分饱和度自洽初始化 Y0=min(Y_in, Y_sat(T))（消除人为过饱和）</td>
+<td><span class="tag bad">同点崩溃</span>数值几乎逐位一致</td></tr>
+<tr><td>step2e</td><td>+ 干空气软启动 + 液滴 d 1e-4→5e-4 + nAlphaSubCycles 3 + 关 Henry</td>
+<td><span class="tag bad">同点崩溃</span>仍然 -4.9~1029K</td></tr>
+<tr><td><b>noPC</b></td><td><b>判别实验：完全关闭相变</b></td>
+<td><span class="tag warn">逐位复现</span>-4.93~1029.25K 与开相变完全一致 →
+<b>相变不是原因</b></td></tr>
+<tr><td>noPC2/3</td><td>nOuterCorrectors 1 + ddtCorr no + 逐步写场定位</td>
+<td>爆温定位到具体单元 → 见 3.2</td></tr>
+</table>
+
+<h3>3.2 根因（单元级实锤）</h3>
+<div class="callout bad">
+t=4µs 时温度异常（&lt;250K 或 &gt;350K）的 5546 个单元，<b>100% 是小体积单元</b>
+（V &lt; 3.4e-11 m³，全域体积中位数 2.1e-10）；其余 5.9 万个单元温度完全正常（278~308K）。
+</div>
+<p>
+机制与项目内 <code>fix_zero_volume_cells.py</code> 文档描述的病完全一致：
+薄片单元 <b>Ap = V/dt ≈ 0 → 压力方程系数 1/Ap 发散 → 速度爆炸（Co 0.0055→141 只要 1 步）→
+温度飞掉</b>。薄片的几何形态是"双大面平行（面心仅隔 0.4µm）+ 微小侧面相连"的退化枢纽片，
+集中在进出口平面（y≈+30mm）下方。
+</p>
+<p>
+<b>节点偏移修复法对这类薄片无效</b>（本轮实测）：把 7626 个薄片单元的最大面节点沿法向偏移 0.05mm，
+体积平均只涨 5%，还把邻居单元挤小（最小体积反而 8.8e-13 → 2.2e-13）；
+1339 个单元"偏移后仍无体积"被跳过。需要<b>整面平移或上游 Workbench 在进出口面下加密一层</b>
+（《网格修复指南.md》早已给出的路线）。网格已从 cas.h5 重新生成回干净状态。
+</p>
+
+<h3>3.3 本轮修掉的次生问题（保留，都有用）</h3>
+<ul>
+<li><b>液侧 Henry 关闭</b>：air.liquid 方程在 alpha≈1e-6 残余下退化（残差恒为 1），
+是爆温链条一环；空气溶解对冷凝量是二阶小量；</li>
+<li><b>液滴直径 1e-4 → 5e-4</b>：界面传质/传热系数 K∝1/d，降低源项刚性；</li>
+<li><b>nAlphaSubCycles 1 → 3</b>：压制 MULES 过/欠冲（曾出现负 alpha 与相和 &gt;1）；</li>
+<li><b>新工具 <code>tools/warmstart_step2.py</code></b>：T/U/p_rgh 从 Step1 按单元热启动
+（两网格单元序已核验一致：质心差 3.6e-18 m，差异只在边界面书写顺序）+ 组分饱和度自洽初始化。
+热启动消除了"T 场冷 + Y 场湿"的人为过饱和爆发，是生产运行的正确起点。</li>
+</ul>
+
+<h3>3.4 当前状态</h3>
+<div class="callout ok">
+<code>case_qishi</code> 已是<b>干净就绪</b>状态：相变开、生产配置、热启动就绪、preflight PASS。
+<b>唯一阻塞 = 进出口面下薄片层网格</b>——修掉它 Step2 就能开跑。
+</div>
+<table>
+<tr><th>路线</th><th>做法</th><th>时机</th></tr>
+<tr><td><b>上游重导出（推荐）</b></td><td>Workbench/Fluent 对进出口面下薄片层加密一层后重新导出 cas.h5，
+再跑 <code>fluent_cas_to_foam_cht.py</code> + <code>fluent_cas_to_foam.py</code> 重建两算例、
+重跑 Step1、重做映射</td><td>《网格修复指南.md》路线 B/C；一次到位</td></tr>
+<tr><td>整面平移工具（待写）</td><td>对薄片单元的整个大面做刚性平移（而非单节点偏移），
+把厚度从 0.4µm 拉到 ~10µm</td><td>不想回 Workbench 时的备选；需要新的工具 + checkMesh 验收</td></tr>
+</table>
+
+<h2>四、对论文写作的直接影响</h2>
+<ul>
+<li><b>Materials &amp; Methods</b>：不受影响，两步法描述照旧（昨天的审计结论维持）。</li>
+<li><b>Results 的 Step1 部分</b>：等 5400 步数据出来后用收敛版 T_int——
+"全界面 278~283K、100% 可结露、瓶颈在湿空气输运"是新的核心结论，
+比昨天的"冷面利用率 20%"更有物理深度也更站得住。</li>
+<li><b>Results 的冷凝量部分</b>：仍然等 Step2 网格修复后出数，红线维持：
+comparison.csv 的 t=0 初始值不能写进论文。</li>
+</ul>
+
+<div class="foot">
+证据索引：Step1 收敛 <code>caseCHT_qishi/log.steady6~8</code> +
+<code>postProcessing/{fluid,solid}/</code>（T_out_mw/Q_interface/Q_solid）；
+Step2 判别 <code>case_qishi/log.noPC</code>（关相变逐位复现）+ <code>4e-06/T.gas</code> 场分析（爆温单元体积分布）；
+薄片修复试错 <code>log.fixsliver</code>；热启动工具 <code>tools/warmstart_step2.py</code>。
+</div>
+
+</div>
+</body>
+</html>

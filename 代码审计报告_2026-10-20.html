@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>代码审计与优化报告 2026-10-20</title>
+<style>
+  :root{--bg:#0f1216;--panel:#161b22;--line:#2a3340;--tx:#e6edf3;--tx2:#9aa7b4;
+        --ok:#3fb950;--warn:#d29922;--bad:#f85149;--acc:#58a6ff}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.65}
+  .wrap{max-width:1120px;margin:0 auto;padding:36px 26px 64px}
+  h1{font-size:24px;margin:0 0 6px;font-weight:650}
+  .sub{color:var(--tx2);font-size:13px;margin-bottom:24px}
+  h2{font-size:16px;margin:32px 0 12px;padding-left:10px;border-left:3px solid var(--acc)}
+  p,li{font-size:14px}
+  code{background:#20272f;padding:1px 6px;border-radius:5px;font-size:12.5px;font-family:"Cascadia Mono",Consolas,monospace;color:#c9d6e4}
+  .mono{font-family:"Cascadia Mono",Consolas,monospace}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:16px 0}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+  .kpi .k{font-size:12px;color:var(--tx2)}
+  .kpi .v{font-size:20px;font-weight:600;font-family:"Cascadia Mono",Consolas,monospace}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--tx2);font-weight:500;font-size:12px;background:var(--panel)}
+  tr:hover td{background:#12171d}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;border:1px solid;white-space:nowrap}
+  .t-bad{color:var(--bad);border-color:#5c2223;background:#2a1113}
+  .t-warn{color:var(--warn);border-color:#5c4415;background:#2a2010}
+  .t-ok{color:var(--ok);border-color:#1f4d2a;background:#0f2417}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:12px 0}
+  .note{font-size:13px;color:var(--tx2)}
+  .foot{margin-top:36px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--tx2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>代码审计与优化报告</h1>
+<div class="sub">
+  项目：<span class="mono">F:\B_Simulation\fangzhen-3</span>　·　范围：OpenFOAM 工具链 + 两个算例 + 根目录 Fluent 脚本 + 文档　·　时间：2026-10-20 16:15<br>
+  方法：静态扫描（编译/告警/硬编码/危险调用/重复实现）+ 逐项实测回归（checkMesh、dup_faces、生成器 diff、修复路径注入测试）
+</div>
+
+<div class="grid">
+  <div class="kpi"><div class="k">Python 脚本</div><div class="v">21 个 / 4.4k 行</div></div>
+  <div class="kpi"><div class="k">编译告警</div><div class="v" style="color:var(--ok)">0</div><div class="note">修掉 1 处非法转义</div></div>
+  <div class="kpi"><div class="k">发现问题</div><div class="v">3 / 6 / 4</div><div class="note">严重 / 一般 / 轻微</div></div>
+  <div class="kpi"><div class="k">已实施改动</div><div class="v" style="color:var(--ok)">12 项</div><div class="note">全部带回归验证</div></div>
+</div>
+
+<h2>一、结论摘要</h2>
+<p>工程结构与风格是统一的（中文盒子头注释、<code>from __future__ import annotations</code>、参数化生成器 + 固定 SOP），
+没有发现安全漏洞（无 <code>eval/exec/pickle</code>、无网络下载后执行、无凭据硬编码）。真正的问题集中在三处：
+<b>运行配置残留</b>、<b>生成器默认配置与"能跑的配置"不一致</b>、<b>多个脚本各抄一份 polyMesh 读取逻辑</b>。
+前两类会直接让人踩坑（重跑空转、Step2 必崩），已在本次全部修掉并加了防复发手段。</p>
+
+<h2>二、问题清单</h2>
+
+<table>
+<thead><tr><th style="width:64px">级别</th><th style="width:250px">位置</th><th>问题与影响</th><th style="width:150px">处置</th></tr></thead>
+<tbody>
+<tr>
+  <td><span class="tag t-bad">严重</span></td>
+  <td><code>caseCHT_qishi/system/controlDict</code></td>
+  <td><code>startFrom latestTime</code> 是验证时留下的：<b>重跑会直接从 400 步"结束"，看起来成功其实什么都没算</b>。</td>
+  <td><span class="tag t-ok">已修</span> 改回 <code>startTime</code>，注释同步</td>
+</tr>
+<tr>
+  <td><span class="tag t-bad">严重</span></td>
+  <td><code>caseCHT_qishi/system/surfaces</code></td>
+  <td>fields 写了 <code>(T U p_rgh)</code>，但固体区没有 U/p_rgh：<b>对 solid 跑会失败，却把上次 fluid 的 vtk 留在原地</b>，误当成新结果。</td>
+  <td><span class="tag t-ok">已修</span> 拆成 <code>surfaces</code>（仅 T，两区域通用）与 <code>surfaces_flow</code>（含 U/p_rgh）</td>
+</tr>
+<tr>
+  <td><span class="tag t-bad">严重</span></td>
+  <td><code>generate_case.py</code> 的 Step2 热物性</td>
+  <td>生成 janaf 气相 + <code>purePhaseModel</code> 液相，相变启动必然 <code>FATAL: Maximum number of iterations exceeded: 100</code>；而 SOP 每次都要重新生成算例 → <b>每次都会踩回同一个坑</b>。</td>
+  <td><span class="tag t-ok">已修</span> 新增 <code>align_step2_thermo.py</code> 并写入 SOP，生成后一条命令对齐</td>
+</tr>
+<tr>
+  <td><span class="tag t-warn">一般</span></td>
+  <td><code>tools/of8.py</code></td>
+  <td>blueCFD 路径写死、无存在性检查（路径错时报的是 cmd 的"不是内部命令"）；算例路径直接拼进 <code>shell=True</code> 字符串，含 <code>&amp; | " %</code> 会被解释。</td>
+  <td><span class="tag t-ok">已修</span> 支持 <code>OF8_HOME</code>、缺文件给出中文指引、拒绝含元字符的路径</td>
+</tr>
+<tr>
+  <td><span class="tag t-warn">一般</span></td>
+  <td><code>tools/generate_case.py:209</code></td>
+  <td>字符串里出现单个 <code>\(</code>，触发 <code>SyntaxWarning: invalid escape sequence</code>；未来 Python 版本会升级为错误。</td>
+  <td><span class="tag t-ok">已修</span> 源码写成 <code>\\(</code>，<b>生成结果逐字节不变</b>（已 diff）</td>
+</tr>
+<tr>
+  <td><span class="tag t-warn">一般</span></td>
+  <td><code>merge_dup_cells.py</code> / <code>fix_pinched_cells.py</code> / <code>drop_duplicate_faces.py</code></td>
+  <td>三个脚本会主动破坏网格（实测：并入 64729→28378；合并扩散到 56% 单元；删面造成 2 个开口单元），但入口没有任何拦截。</td>
+  <td><span class="tag t-ok">已修</span> 文件头加弃用横幅；<code>fix_pinched_cells</code> 加 <code>--force</code> 硬守护（实测拒绝执行）</td>
+</tr>
+<tr>
+  <td><span class="tag t-warn">一般</span></td>
+  <td>7 个脚本各有一份 <code>read_points/read_faces/read_boundary</code></td>
+  <td>约 120 行重复实现，且各版本对异常输入的处理不一致（静默跳过 vs 抛错）。</td>
+  <td><span class="tag t-ok">已修</span> 新增 <code>tools/ofmesh.py</code>，已迁移 <code>mesh_topology_report</code>（输出逐字一致）</td>
+</tr>
+<tr>
+  <td><span class="tag t-warn">一般</span></td>
+  <td><code>caseCHT_qishi/0/fluid/V.bak</code>、<code>0/solid/V</code></td>
+  <td>残留的单元体积场，补丁名还是旧的 <code>fluid_to_solid / solid_to_fluid</code>；求解器不读，但一致性检查会报错，也容易误用。</td>
+  <td><span class="tag t-ok">已删</span></td>
+</tr>
+<tr>
+  <td><span class="tag t-warn">一般</span></td>
+  <td>仓库根 / <code>OpenFOAM/tools</code></td>
+  <td><code>__pycache__</code>、<code>log.*</code>、<code>postProcessing_prev</code> 等产物未纳入忽略规则，污染目录。</td>
+  <td><span class="tag t-ok">已修</span> 新增 <code>OpenFOAM/.gitignore</code></td>
+</tr>
+<tr>
+  <td><span class="tag t-warn">一般</span></td>
+  <td><code>网格修复指南.md</code></td>
+  <td>整篇在教人修一个<b>已被证伪</b>的缺陷（"捏点必须源头修复"），与今天的结论冲突，会持续误导。</td>
+  <td><span class="tag t-ok">已修</span> 顶部加结案说明，正文保留为历史排查记录</td>
+</tr>
+<tr>
+  <td><span class="tag t-ok">轻微</span></td>
+  <td><code>0/</code> 场文件缩进</td>
+  <td>generator 用 8 空格缩进补丁名，caseCHT 用 4 空格；不影响解析，只是风格不统一。</td>
+  <td>不改（改动零收益、有 diff 风险）</td>
+</tr>
+<tr>
+  <td><span class="tag t-ok">轻微</span></td>
+  <td><code>prepare_all_structures.py:23,37</code>、<code>routeA_*.py:34-47</code></td>
+  <td>写死 <code>F:/B_Simulation/...</code> 与用户目录下的解释器路径，换机器/换盘符即失效。</td>
+  <td>未改（属已验证脚本，建议后续统一用 <code>__file__</code> 推导）</td>
+</tr>
+<tr>
+  <td><span class="tag t-ok">轻微</span></td>
+  <td><code>tools/mesh_stats.py</code></td>
+  <td>只扫 <code>cases/</code> 下 8 个结构，对单个算例/单个文件用不上，容易让人误以为脚本坏了。</td>
+  <td>文档已注明（README + MEMORY）</td>
+</tr>
+<tr>
+  <td><span class="tag t-ok">轻微</span></td>
+  <td><code>tests/</code> 下 30+ 探针目录</td>
+  <td>累计 200+ MB 可再生数据（<code>probe_qishi_v81</code> 146 MB、<code>_qishi_cht</code> 64 MB 等）。</td>
+  <td>未删（受安全删除策略限制），路径清单见文末</td>
+</tr>
+</tbody>
+</table>
+
+<h2>三、已实施改动与验证</h2>
+<table>
+<thead><tr><th style="width:290px">改动</th><th>验证方式</th><th style="width:130px">结果</th></tr></thead>
+<tbody>
+<tr><td>新增 <code>tools/ofmesh.py</code>，<code>mesh_topology_report.py</code> 改为调用它，删掉本地 4 个 reader + 死变量 <code>remap</code></td><td>对同一网格重跑，逐行比对输出</td><td><span class="tag t-ok">输出完全一致</span></td></tr>
+<tr><td>新增 <code>tools/align_step2_thermo.py</code>（液相 multiComponent+Henry、气相 eConst），并写进 SOP</td><td>对已对齐算例跑（应跳过）；对新生成算例跑（应生效）</td><td><span class="tag t-ok">幂等 + 生效</span></td></tr>
+<tr><td><code>of8.py</code> 重写：<code>OF8_HOME</code>、环境校验、元字符拒绝</td><td>正常运行 checkMesh；故意把 OF8_HOME 指错</td><td><span class="tag t-ok">60387 单元 Mesh OK / 中文报错</span></td></tr>
+<tr><td><code>generate_case.py</code> 修非法转义</td><td><code>-W error::SyntaxWarning</code> 编译 + 与现有 fvSchemes 做 diff</td><td><span class="tag t-ok">无警告，零差异</span></td></tr>
+<tr><td><code>fix_pinched_cells.py</code> 加 <code>--force</code> 守护</td><td>不带参数直接运行（应拒绝且不动网格）</td><td><span class="tag t-ok">拒绝执行，网格未变</span></td></tr>
+<tr><td><code>mesh_topology_report.py --fix</code> 修复路径</td><td>注入真重复面 → 诊断 → 修复 → <code>dup_faces</code> 复查</td><td><span class="tag t-ok">0 重复面</span></td></tr>
+<tr><td>两处 controlDict 残留参数复位</td><td>grep 复核 + 配置一致性检查</td><td><span class="tag t-ok">已复位</span></td></tr>
+<tr><td><code>surfaces</code> 拆分</td><td>对 solid 区域实跑 <code>postProcess -func surfaces</code></td><td><span class="tag t-ok">只产出 T_z0.vtk</span></td></tr>
+<tr><td>三个弃用脚本加横幅 / 删过期 V 场 / 新增 .gitignore / 更新两份文档</td><td>编译 + 全项目补丁名一致性检查</td><td><span class="tag t-ok">0 处真实不一致</span></td></tr>
+</tbody>
+</table>
+
+<h2>四、建议但本次未做（附理由）</h2>
+<div class="card">
+<ul>
+<li><b>把核心转换/映射脚本也切到 <code>ofmesh.py</code></b>：它们是已验证管线（fluent_cas_to_foam*、map_interface_T），
+改动收益只是减少重复，风险却是动到已验证代码。建议等下一次真正需要改它们时顺手迁移。</li>
+<li><b>删除 3 个弃用脚本</b>：已加横幅 + 守护，删除更干净，但受当前安全删除策略限制，且留着对追溯历史有用。</li>
+<li><b><code>tools/preflight.py</code>（已实施，16:15 追加）</b>：一次跑完 10 项检查 —— 语法编译 / 依赖 /
+blueCFD 环境 / 算例结构 / polyMesh 计数与 startFace / 拓扑（真重复=FAIL、铰链=WARN）/
+场文件补丁名一致性 / controlDict（含 startFrom 空转检测）/ 多区域耦合界面 / Step2 热物性。
+<code>FAIL</code> 时退出码 1，支持 <code>--json</code> 与 <code>--checkmesh</code>。已挂进 SOP 的 Step 0。</li>
+<li><b>硬编码路径统一改为 <code>__file__</code> 推导</b>：涉及 <code>prepare_all_structures.py</code>、<code>routeA_*.py</code>。</li>
+<li><b>清理 <code>tests/</code> 探针目录</b>：<code>probe_qishi_v81</code>（146 MB）、<code>_qishi_cht</code>（64 MB）、
+<code>_dup_demo/_dup2/_gen_check/_align_demo</code> 等，全部可由脚本重建。</li>
+</ul>
+</div>
+
+<h2>五、复核命令</h2>
+<div class="card">
+<pre class="mono" style="margin:0;font-size:12.5px;color:#c9d6e4;white-space:pre-wrap">python -m py_compile OpenFOAM/tools/*.py                 # 语法/告警
+python OpenFOAM/tools/mesh_topology_report.py caseCHT_qishi/constant/fluid/polyMesh
+python OpenFOAM/tools/of8.py caseCHT_qishi "checkMesh -region fluid -constant"
+python OpenFOAM/tools/align_step2_thermo.py case_qishi    # 幂等，已对齐会跳过</pre>
+</div>
+
+<div class="foot">
+  改动清单：新增 tools/ofmesh.py、tools/align_step2_thermo.py、OpenFOAM/.gitignore、caseCHT_qishi/system/surfaces_flow；
+  修改 tools/of8.py、tools/generate_case.py、tools/mesh_topology_report.py、tools/fix_pinched_cells.py、
+  tools/merge_dup_cells.py、tools/drop_duplicate_faces.py、caseCHT_qishi/system/{controlDict,surfaces}、
+  case_qishi/system/controlDict、README.md、网格修复指南.md。
+</div>
+
+</div>
+</body>
+</html>

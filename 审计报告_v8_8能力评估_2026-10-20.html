@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenFOAM 管线可靠性与 v8_8 处理能力审计 · 2026-10-20</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a323d;
+    --tx:#e6edf3; --tx2:#9aa7b4; --tx3:#6e7b8a;
+    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --info:#58a6ff; --acc:#bc8cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+       font:15px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:48px 28px 80px;}
+  header{border-bottom:1px solid var(--line);padding-bottom:26px;margin-bottom:34px;}
+  .kicker{color:var(--info);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px}
+  h1{font-size:29px;line-height:1.35;margin:0 0 14px;font-weight:650;letter-spacing:-.01em}
+  .meta{color:var(--tx3);font-size:13px}
+  .meta code{color:var(--tx2);background:var(--panel2);padding:1px 6px;border-radius:4px}
+  h2{font-size:19px;margin:44px 0 16px;padding-left:11px;border-left:3px solid var(--info);font-weight:620}
+  h3{font-size:15.5px;margin:26px 0 10px;color:var(--tx);font-weight:620}
+  p{margin:10px 0;color:var(--tx)}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:6px 0}
+  code{font-family:"Cascadia Mono",Consolas,monospace;font-size:13px;
+       background:var(--panel2);padding:1.5px 5px;border-radius:4px;color:#c9d1d9}
+  .verdict{background:linear-gradient(180deg,#151d27,#12171e);border:1px solid var(--line);
+           border-radius:12px;padding:22px 24px;margin:22px 0 8px}
+  .verdict .row{display:flex;gap:14px;align-items:flex-start;padding:9px 0;border-bottom:1px dashed #232b35}
+  .verdict .row:last-child{border-bottom:none}
+  .tag{flex:0 0 92px;font-size:12px;font-weight:700;letter-spacing:.03em;padding:3px 0;text-align:center;border-radius:5px}
+  .t-ok{background:rgba(63,185,80,.14);color:var(--ok);border:1px solid rgba(63,185,80,.35)}
+  .t-warn{background:rgba(210,153,34,.14);color:var(--warn);border:1px solid rgba(210,153,34,.35)}
+  .t-bad{background:rgba(248,81,73,.14);color:var(--bad);border:1px solid rgba(248,81,73,.35)}
+  .verdict b{color:var(--tx)}
+  .verdict .row div:last-child{color:var(--tx2);font-size:14.2px}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.6px}
+  th{background:var(--panel2);color:var(--tx2);font-weight:600;text-align:left;
+     padding:9px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:8px 11px;border-bottom:1px solid #1f262f;vertical-align:top;color:var(--tx)}
+  tr:hover td{background:#141a21}
+  .num{font-family:"Cascadia Mono",Consolas,monospace;text-align:right;white-space:nowrap}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)} .dim{color:var(--tx3)}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:16px 0}
+  .box.hi{border-color:rgba(248,81,73,.4);background:linear-gradient(180deg,rgba(248,81,73,.07),var(--panel))}
+  .box.note{border-color:rgba(88,166,255,.35);background:linear-gradient(180deg,rgba(88,166,255,.06),var(--panel))}
+  .box h4{margin:0 0 8px;font-size:14.5px;color:var(--tx)}
+  .box p{margin:6px 0;font-size:14px;color:var(--tx2)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));gap:12px;margin:18px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:13px 15px}
+  .stat .k{color:var(--tx3);font-size:12px;margin-bottom:5px}
+  .stat .v{font-size:19px;font-weight:640;font-family:"Cascadia Mono",Consolas,monospace}
+  .stat .s{color:var(--tx3);font-size:11.5px;margin-top:3px}
+  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);color:var(--tx3);font-size:12.5px}
+  .formula{font-family:"Cascadia Mono",Consolas,monospace;font-size:12.8px;color:var(--tx2);
+           background:#11161c;border:1px solid #212832;border-radius:7px;padding:10px 13px;margin:12px 0;overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Audit · 实测复核</div>
+  <h1>OpenFOAM 管线可靠性 &amp; Qishi_v8_8 处理能力评估</h1>
+  <div class="meta">
+    被审对象 <code>F:\B_Simulation\fangzhen-3\OpenFOAM</code> ·
+    数据源 <code>Qishi_v8_8_20261012</code> ·
+    2026-10-20 · 全部结论由本机实跑得出，不采信文档自述
+  </div>
+</header>
+
+<h2>一、结论先行</h2>
+
+<div class="verdict">
+  <div class="row">
+    <span class="tag t-ok">支持</span>
+    <div><b>网格转换与双区域拆分：完整支持 v8_8。</b>实测转换成功（6 分 49 秒，退出码 0），
+    648,672 单元全量保留，两个流固界面正确合并为一个 <code>mappedWall</code>，
+    流体/固体两区 <code>checkMesh</code> 均返回 <b>Mesh OK</b>。</div>
+  </div>
+  <div class="row">
+    <span class="tag t-ok">支持</span>
+    <div><b>Step 1（共轭传热）算例准备：支持，但需手工挪字典。</b>项目里没有 CHT 字典生成器，
+    我从 <code>caseCHT_qishi</code> 复制后跑 <code>preflight --checkmesh</code>：<b>11 项全 PASS</b>，
+    仅 7 对铰链 WARN。已产出可直接开跑的 <code>caseCHT_v88</code>。</div>
+  </div>
+  <div class="row">
+    <span class="tag t-warn">有条件</span>
+    <div><b>Step 1 求解：能跑，但“收敛”二字目前不成立。</b>v8_1 的 Step 1 跑到 9000 次外迭代，
+    用<b>通量加权</b>口径的能量平衡比值仍是 <b>1.080</b>（自定阈值 &lt;1.05），
+    <code>T_out</code> 与 <code>Q_interface</code> 仍在单调漂移。v8_8 单元数是其 5.2 倍，
+    同等迭代约需 6–9 小时单核。</div>
+  </div>
+  <div class="row">
+    <span class="tag t-bad">不支持</span>
+    <div><b>Step 2（冷凝）没有可用能力。</b>全项目<b>没有任何一个结构</b>跑出过稳态冷凝结果：
+    <code>case_qishi</code> 只写出 <code>0 / 2e-06 / 4e-06</code> 三个时刻便以 SIGFPE 终止。
+    这一阻塞与结构无关，v8_8 只会更困难。</div>
+  </div>
+  <div class="row">
+    <span class="tag t-bad">误判</span>
+    <div><b>“薄片单元”这个根因说法站不住脚。</b><code>checkMesh</code> 实测 v8_1 最大长宽比
+    <b>9.23</b>、v8_8 流体区 <b>8.54</b>——两者都没有薄片单元。真实约束是<b>极小体积单元</b>
+    + 相变刚性，据此开的“进出口加密”处方未必能解决问题。</div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="stat"><div class="k">v8_8 单元总数</div><div class="v">648,672</div><div class="s">流体 444,474 + 固体 204,198</div></div>
+  <div class="stat"><div class="k">v8_8 面总数</div><div class="v">3,790,749</div><div class="s">内部 3,642,700 / 边界 148,049</div></div>
+  <div class="stat"><div class="k">冷凝界面面积</div><div class="v">123.64 cm²</div><div class="s">107.20 + 16.44（两组）</div></div>
+  <div class="stat"><div class="k">冷板 wall_cool</div><div class="v">16.000 cm²</div><div class="s">7,615 面，与 v8_12 一致</div></div>
+  <div class="stat"><div class="k">最差单元长宽比</div><div class="v">8.54</div><div class="s">Mesh OK（&lt;100 即健康）</div></div>
+  <div class="stat"><div class="k">最小单元体积</div><div class="v">3.05e-13</div><div class="s">等效立方边长 67 µm</div></div>
+</div>
+
+<h2>二、审计方法</h2>
+<p>三条原则：<b>跑，不看文档</b>；<b>换算例，不动既有结果</b>；<b>每个判断配一条可复现的证据</b>。
+具体动作：</p>
+<ol>
+  <li>用 h5py 直读 <code>FLTG.2-Setup-Output.cas.h5</code>，枚举 cell zone / face zone / shadow 配对，
+      独立复算每个面区的面积与每个单元的体积（Newell 向量面积 + 散度定理），不依赖项目自带脚本。</li>
+  <li>在独立目录做完整双区域转换，再跑 OpenFOAM 官方 <code>checkMesh</code> 两区域——这是唯一有权威性的网格判定。</li>
+  <li>复制字典组装 CHT 算例，跑项目自带 <code>preflight --checkmesh</code> 门禁。</li>
+  <li>生成 Step 2 单区域算例，跑 <code>align_step2_thermo.py</code> + <code>preflight</code>。</li>
+  <li>用 62,158 面界面做 <code>map_interface_T.py verify</code> 压力测试（同时量耗时与内存）。</li>
+  <li>复核既有结果：从 <code>caseCHT_qishi/9000</code> 场文件自行算通量加权出口温度，
+      独立判断 Step 1 是否真的收敛；读 <code>log.step2e</code> 定位 Step 2 崩溃机理。</li>
+</ol>
+
+<h2>三、代码结构</h2>
+<p>28 个 Python 脚本 / 5,284 行，职责分层清晰，公共几何逻辑已抽到 <code>tools/ofmesh.py</code>（161 行），
+核心五个脚本 2,077 行。就一个科研自用管线而言，工程化程度高于平均水准。</p>
+
+<table>
+<thead><tr><th>层</th><th>脚本</th><th>职责</th><th>评价</th></tr></thead>
+<tbody>
+<tr><td>转换</td><td><code>fluent_cas_to_foam.py</code><br><code>fluent_cas_to_foam_cht.py</code></td><td>cas.h5 → 单区域 / 双区域 polyMesh</td><td class="ok">清晰，含朝向校正与节点压缩</td></tr>
+<tr><td>字典</td><td><code>generate_case.py</code></td><td>Step 2 全套 0/ constant/ system/</td><td class="warn">仅 Step 2；A_IN 硬编码</td></tr>
+<tr><td>门禁</td><td><code>preflight.py</code></td><td>10 项开跑前检查，FAIL 返回 1</td><td class="ok">本项目最有价值的资产</td></tr>
+<tr><td>耦合</td><td><code>setup_cht_coupling.py</code></td><td>界面同名 + coupledBaffleMixed</td><td class="ok">解决过 Q≡0 的真 bug</td></tr>
+<tr><td>映射</td><td><code>map_interface_T.py</code></td><td>extract / verify / map</td><td class="ok">verify 是一致性门禁，思路正确</td></tr>
+<tr><td>拓扑</td><td><code>mesh_topology_report.py</code></td><td>真重复面 vs 铰链判定</td><td class="ok">只删真重复，有分寸</td></tr>
+<tr><td>弃用</td><td><code>merge_dup_cells</code> / <code>fix_pinched_cells</code> / <code>drop_duplicate_faces</code></td><td>—</td><td class="ok">README 标注弃用，fix_pinched 加 <code>--force</code> 硬闩</td></tr>
+</tbody>
+</table>
+
+<h3>结构性缺陷</h3>
+<div class="box hi">
+<h4>1. <code>cases/</code> 目录不存在，但四个脚本 + 一份 README 全都依赖它</h4>
+<p>实测 <code>ls cases</code> → No such file or directory。于是 <code>prepare_all_structures.py</code>（批量转 8 结构）、
+<code>compare.py</code>（跨结构排名）、<code>mesh_stats.py</code>（面积统计）、<code>run_all.sh</code>（一键跑）全部失去输入。
+"8 结构对比"这条主线目前是断的，只剩 v8_1 一条手工链路。</p>
+</div>
+
+<div class="box hi">
+<h4>2. <code>run_all.sh</code> 与两步共轭 SOP 相互矛盾</h4>
+<p>脚本第 51 行直接跑 <code>multiphaseEulerFoam</code>，<b>完全没有 Step 1</b>。也就是说"一键跑全部结构"
+用的是已被否决的"coldWall 直接定 5℃"简化路线——跑出来的会是过度冷却的结果。
+另外第 61 行用 <code>alphaPhi.liquid</code>（体积通量，m³/s），而 <code>controlDict</code> 的指标用
+<code>alphaRhoPhi.liquid</code>（质量通量，kg/s）：同一指标在同一项目里有两套量纲。</p>
+</div>
+
+<h2>四、依赖与运行环境</h2>
+<table>
+<thead><tr><th>依赖</th><th>要求</th><th>本机实测</th><th>结论</th></tr></thead>
+<tbody>
+<tr><td>Python</td><td>3.13 工程内置环境</td><td>可用</td><td class="ok">就绪</td></tr>
+<tr><td>numpy</td><td>必需</td><td>2.5.2</td><td class="ok">就绪</td></tr>
+<tr><td>h5py</td><td>必需（cas.h5 读写）</td><td>3.16.0</td><td class="ok">就绪</td></tr>
+<tr><td>scipy / matplotlib</td><td>仅出图</td><td>1.18.1 / 3.11.1</td><td class="ok">就绪</td></tr>
+<tr><td>OpenFOAM</td><td>blueCFD-Core OF8</td><td><code>D:\APP\openfoam</code>，<code>setvars_OF8.bat</code> 在位</td><td class="ok">就绪，<code>OF8_HOME</code> 可覆盖</td></tr>
+</tbody>
+</table>
+<p>可移植性问题：<code>prepare_all_structures.py:23</code> 把解释器路径写死成
+<code>C:/Users/LELE/.workbuddy/...</code>，换机器或换用户名直接失效（其余脚本只在注释里写死，不影响执行）。
+<code>of8.py</code> 的做法是正确的模板——默认值 + 环境变量覆盖。</p>
+
+<h2>五、配置与流程缺陷（按影响排序）</h2>
+
+<table>
+<thead><tr><th>#</th><th>问题</th><th>证据</th><th>后果</th></tr></thead>
+<tbody>
+<tr>
+<td>1</td><td>README「转换完立刻 checkMesh」的顺序会直接失败</td>
+<td>我实测：转换后 <code>checkMesh</code> 报 <code>cannot find .../system/controlDict</code>，退出码 1；补一个最小 controlDict 后立刻 Mesh OK</td>
+<td class="bad">照文档走的新结构会卡在第一步，误判为"网格坏"</td>
+</tr>
+<tr>
+<td>2</td><td><code>generate_case.py</code> 的入口面积 <code>A_IN=1.1298e-4</code> 是硬编码</td>
+<td>我复算 v8_8 的 inlet 面积 = 1.129984e-4 m²（吻合 0.02%），脚本<b>不校验</b>网格实际入口面积</td>
+<td class="warn">换一个入口尺寸不同的结构，U_in 静默算错，流量跟着错</td>
+</tr>
+<tr>
+<td>3</td><td><code>generate_case.py</code> 默认写 <code>coldWall → uniform 278.15</code></td>
+<td>源码 <code>bnd_cold_T()</code></td>
+<td class="bad">若忘跑 <code>map_interface_T.py map</code>，会跑出"整个界面压到 5℃"的过度冷却结果，且门禁不报错</td>
+</tr>
+<tr>
+<td>4</td><td>Step 1 流体用 <code>rhoConst</code> + 干空气常物性</td>
+<td><code>caseCHT_qishi/constant/fluid/thermophysicalProperties</code>：<code>rho 1.1455</code> 常数</td>
+<td class="bad">浮升力恒为 0，等于忽略自然对流。量级估算 Gr/Re² ≈ 1.2 → 混合对流区，不是可忽略项</td>
+</tr>
+<tr>
+<td>5</td><td>单向耦合，凝液潜热不反馈给固体</td>
+<td>两步方案设计本身</td>
+<td class="warn">冷板热流被低估；论文里必须写明这条假设</td>
+</tr>
+<tr>
+<td>6</td><td>出口温度指标用 <code>areaAverage</code></td>
+<td><code>generate_case.py</code> 的 <code>T_out</code> FO</td>
+<td class="warn">我实测两者差 0.37 K：面积平均 279.26 K vs 通量加权 279.63 K，能量比值 1.066 vs 1.080</td>
+</tr>
+<tr>
+<td>7</td><td><code>fvSolution</code> 里 <code>"(U|h)Final" { $U; }</code></td>
+<td><code>caseCHT_qishi/system/fluid/fvSolution</code></td>
+<td class="warn">靠正则键匹配才能解析，能跑但脆弱，改名即崩</td>
+</tr>
+<tr>
+<td>8</td><td>批量/对比脚本依赖已删除的 <code>cases/</code></td>
+<td>见第三节</td>
+<td class="bad">8 结构对比链路断开</td>
+</tr>
+</tbody>
+</table>
+
+<div class="box note">
+<h4>值得肯定的地方</h4>
+<p><code>preflight.py</code> 的设计思路完全正确：把"跑完才发现白跑"的坑（startFrom 空转、janaf 必 FATAL、
+界面不同名导致 Q≡0）压到 2 秒内暴露，并用退出码供脚本 gate。这次审计里它准确报出了
+v8_8 的全部真实状态，没有假阴性也没有假阳性。这套门禁应当继续扩展，而不是绕过。</p>
+</div>
+
+<h2>六、v8_8 实测：逐环节能力</h2>
+
+<h3>6.1 源数据盘点</h3>
+<table>
+<thead><tr><th>文件</th><th>大小</th><th>性质</th></tr></thead>
+<tbody>
+<tr><td><code>FLTG.2-Setup-Output.cas.h5</code></td><td class="num">116 MB</td><td>算例+网格，管线唯一需要的输入</td></tr>
+<tr><td><code>FLTG.2-4.cas.h5</code></td><td class="num">116 MB</td><td>同一几何的另一次导出</td></tr>
+<tr><td><code>FLTG.2-4-00541.dat.h5</code></td><td class="num">72.7 MB</td><td>结果：<b>单相</b>（<code>results/1/phase-1</code>）</td></tr>
+<tr><td><code>FLTG.2.msh.h5</code></td><td class="num">123 MB</td><td>纯网格</td></tr>
+</tbody>
+</table>
+<div class="box hi">
+<h4>这批 .dat.h5 不能当冷凝对比基准</h4>
+<p>读 <code>settings/Data Variables</code> 的 monitor：温度质量加权平均在 0→541 次迭代间恒为
+<b>308.15 K</b>，质量流量恒为 ±2.0e-5 kg/s。也就是说该 Fluent 算例<b>没有开启传热/冷壁</b>，
+只是一个流场初始化基线。而且项目里<b>没有任何工具能读 .dat.h5 的场数据</b>（<code>grep</code> 全工具仅匹配
+postProcessing 的 .dat 文本），所以连"用它的 U/p 做初场"这条路也没铺。</p>
+</div>
+
+<h3>6.2 分区结构</h3>
+<p>两个 cell zone：<code>1623</code>（流体，444,474 单元）与 <code>1620</code>（固体，204,198 单元）。
+<b>注意：zone 名已损坏</b>成 <code>____-_</code> / <code>zone-----</code>（中文名在导出时丢了），
+但转换器是按 <code>inlet</code> / 含 <code>cool</code> 的关键字识别，不依赖 zone 名，所以逻辑上不受影响——
+这一条值得记下来：<b>不要试图用 zone 名做任何判断</b>。</p>
+
+<table>
+<thead><tr><th>面区</th><th class="num">面数</th><th class="num">面积</th><th>归属 / 去向</th></tr></thead>
+<tbody>
+<tr><td>inlet</td><td class="num">2,564</td><td class="num">1.130 cm²</td><td>流体 patch</td></tr>
+<tr><td>outlet</td><td class="num">2,578</td><td class="num">1.130 cm²</td><td>流体 patch</td></tr>
+<tr><td>zone-----:1</td><td class="num">105</td><td class="num">0.34 cm²</td><td>流体 wall</td></tr>
+<tr><td>____-_-zone-----_1（+shadow）</td><td class="num">14,498×2</td><td class="num">107.199 cm²</td><td>流固界面 A</td></tr>
+<tr><td>____-_-zone-----（+shadow）</td><td class="num">47,660×2</td><td class="num">16.438 cm²</td><td>流固界面 B</td></tr>
+<tr><td>wall_cool</td><td class="num">7,615</td><td class="num">16.000 cm²</td><td>固体 coldWall（5℃）</td></tr>
+<tr><td>____-_:1</td><td class="num">10,871</td><td class="num">128.626 cm²</td><td>固体 outer（绝热）</td></tr>
+</tbody>
+</table>
+<p>两侧界面面积逐位相等（107.1988 cm² / 16.4383 cm²），说明是<b>零厚度共形接触</b>，
+<code>mappedWall + nearestPatchFace</code> 可以精确配对。两组界面被合并成<b>一个</b> 62,158 面的补丁，
+这正是 <code>coupledBaffleMixed</code> 按补丁名配对所需要的形态。</p>
+
+<h3>6.3 全链路实跑结果</h3>
+<table>
+<thead><tr><th>环节</th><th>命令</th><th>结果</th><th>耗时</th></tr></thead>
+<tbody>
+<tr><td>双区域转换</td><td><code>fluent_cas_to_foam_cht.py</code></td><td class="ok">exit 0；fluid 2,462,113 面 / solid 1,328,636 面</td><td class="num">6m49s</td></tr>
+<tr><td>checkMesh fluid</td><td><code>checkMesh -region fluid</code></td><td class="ok">Mesh OK；aspect 8.54 / 非正交 61.07 / skew 3.73 / openness 3.1e-16</td><td class="num">~20s</td></tr>
+<tr><td>checkMesh solid</td><td><code>checkMesh -region solid</code></td><td class="ok">Mesh OK；aspect 7.82 / 非正交 65.68 / Vtot 5.414e-5 m³</td><td class="num">~12s</td></tr>
+<tr><td>CHT 门禁</td><td><code>preflight --checkmesh</code></td><td class="ok">layout / polymesh×2 / patches / controld / cht / checkMesh×2 全 PASS</td><td class="num">42s</td></tr>
+<tr><td>Step 2 字典</td><td><code>generate_case.py</code> + <code>align_step2_thermo.py</code></td><td class="ok">生成 20 个字典；热物性对齐成功</td><td class="num">&lt;5s</td></tr>
+<tr><td>Step 2 门禁</td><td><code>preflight</code></td><td class="ok">PASS（6 对铰链 WARN）</td><td class="num">11s</td></tr>
+<tr><td>界面映射校验</td><td><code>map_interface_T.py verify</code></td><td class="ok">62,158 面，最近邻最大偏差 1e-6 mm，一一映射 PASS</td><td class="num">100.7s</td></tr>
+</tbody>
+</table>
+
+<div class="box note">
+<h4>映射环节的两个量化事实</h4>
+<p>① 正确性没问题：<code>verify</code> 的"面数一致 + 逐面精确对应 + 一一映射"三条全过，
+说明 Step 1 的 <code>interface</code> 与 Step 2 的 <code>coldWall</code> 确实是同一套面。</p>
+<p>② 但代价随面数平方增长：v8_1 的 9,459 面是秒级，v8_8 的 62,158 面需要 101 秒，
+单块临时数组约 512×62,158×3×8 B ≈ <b>763 MB</b>。它还能跑，但已经把"随手跑一下"变成"泡杯茶再回来"，
+而且再放大一倍面数就有内存风险。</p>
+</div>
+
+<h2>七、与 v8_1 的横向对比，以及一处必须纠正的旧结论</h2>
+
+<table>
+<thead><tr><th>指标</th><th class="num">v8_1（已跑通）</th><th class="num">v8_8（本次审计）</th><th class="num">倍数</th></tr></thead>
+<tbody>
+<tr><td>流体 / 固体单元</td><td class="num">64,729 / 60,387</td><td class="num">444,474 / 204,198</td><td class="num">5.2×</td></tr>
+<tr><td>总面数</td><td class="num">348,446</td><td class="num">3,790,749</td><td class="num">10.9×</td></tr>
+<tr><td>冷凝面面数</td><td class="num">9,459</td><td class="num">62,158</td><td class="num">6.6×</td></tr>
+<tr><td>冷凝面面积</td><td class="num">121.6 cm²（单组）</td><td class="num">123.6 cm²（两组）</td><td class="num">1.02×</td></tr>
+<tr><td>最小单元体积</td><td class="num">8.83e-13（96 µm）</td><td class="num">3.05e-13（67 µm）</td><td class="num">1/2.9</td></tr>
+<tr><td>V &lt; 1e-11 的单元</td><td class="num">7,626（11.8%）</td><td class="num">230,830（51.9%）</td><td class="num">30×</td></tr>
+<tr><td><b>checkMesh 最大长宽比</b></td><td class="num">9.23</td><td class="num">8.54</td><td class="num">≈1</td></tr>
+<tr><td>最大非正交角</td><td class="num">53.3°</td><td class="num">61.1°</td><td class="num">—</td></tr>
+</tbody>
+</table>
+
+<div class="box hi">
+<h4>纠正：Step 2 的阻塞不是"薄片单元"</h4>
+<p>项目文档（README 第七节、工作记忆）把 Step 2 的崩溃归因为"双大面平行薄片单元"。我用统一口径
+（形状因子 q = V / A<sub>max</sub><sup>1.5</sup>，等价于厚度/边长）量了两套网格：</p>
+<ul>
+<li>v8_1：V&lt;1e-11 的 7,624 个单元，q 中位 <b>0.43</b>，最小 0.152（长宽比约 7），<b>q&lt;1e-2 的一个都没有</b>；</li>
+<li>v8_8 流体区：全部单元 q 中位 0.50，<b>q&lt;1e-3 的 0 个</b>；</li>
+<li>官方 <code>checkMesh</code> 独立复核：最大长宽比 9.23 / 8.54。</li>
+</ul>
+<p>三条证据指向同一结论：<b>两套网格都不存在薄片单元</b>。那些小体积单元只是"小"，形状是正常的
+（等效 67–96 µm 的等轴小胞）。真正的约束是<b>小体积单元设定了时间步上限</b>，叠加相变源项刚性。
+这意味着"给进出口面下层加密"这张处方<b>没有对准病根</b>——加密只会制造更多更小的单元。</p>
+</div>
+
+<h3>Step 2 崩溃的实际形态（case_qishi / v8_1）</h3>
+<div class="formula">
+deltaT = 2e-06（固定） →  t=2e-06 时  Co max 0.0055
+                      →  t=4e-06 时  Co max 141.6      ← 一步之内速度爆炸
+                      →  随后 FOAM_SIGFPE 终止，只写出 4e-06
+</div>
+<p>Co 在<b>固定小步长</b>下跨 4 个量级，这不是 CFL 超限（若是，调时间步即可），而是
+压力—速度耦合在极小体积单元处失稳后的雪崩。这一步没有定位到具体单元，我不下断言；
+但可以确定的是：把它当成"网格有薄片"来处理，方向错了。</p>
+
+<h2>八、Step 1 的收敛状态（v8_1，9000 次外迭代）</h2>
+<p>项目自己定的判据是 <code>Q_interface / [ṁ·cp·(T_in−T_out)] &lt; 1.05</code>。我从
+<code>caseCHT_qishi/9000</code> 的场文件<b>自己复算</b>，不用现成 FO 输出：</p>
+
+<table>
+<thead><tr><th>量</th><th class="num">数值</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>质量流量 ṁ</td><td class="num">1.99985e-05 kg/s</td><td>入口出口守恒（Σ|U·A| 与入口差 0.006%）</td></tr>
+<tr><td>T_in / T_out（通量加权）</td><td class="num">308.15 / 279.63 K</td><td>面积平均为 279.26 K，两者差 0.37 K</td></tr>
+<tr><td>Q_interface</td><td class="num">−0.6197 W</td><td>界面热流积分</td></tr>
+<tr><td>ṁ·cp·ΔT</td><td class="num">−0.5736 W</td><td>cp = 1006 J/(kg·K)</td></tr>
+<tr><td><b>能量平衡比值</b></td><td class="num bad">1.080</td><td>阈值 &lt;1.05 → <b>未达标</b></td></tr>
+<tr><td>T_out 漂移</td><td class="num warn">−1.4e-5 K/迭代</td><td>8900→9000 仍单调下降，无平台</td></tr>
+<tr><td>Q_interface 漂移</td><td class="num warn">−6.3e-6 W/50 迭代</td><td>同步单调漂移</td></tr>
+</tbody>
+</table>
+
+<p>结论：v8_1 的 Step 1 是<b>"接近但未收敛"</b>。质量守恒已经到位，热侧还在缓慢降温。
+如果现在就抽界面温度去映射，<code>T_int</code> 会系统性偏高（固体尚未冷透），冷凝量被低估。
+这不影响"管线能跑"的判断，但影响"数字能不能进论文"。</p>
+
+<h2>九、缺口清单与建议</h2>
+
+<h3>P0 —— 不给结论就不能算完</h3>
+<ol>
+<li><b>Step 2 必须先在一个结构上跑出可用的稳态</b>。在此之前，"8 结构冷凝效率对比"没有任何数据支撑。
+建议先在 v8_1 上把 <code>deltaT</code> 与相变源项松弛做成参数扫描（而不是改网格），
+并用 <code>ablate.py</code> 记录崩溃前场统计——项目已经有这个工具，只是要真的用它定位单元级别的原因。</li>
+<li><b>重新校准 Step 2 的根因判断</b>。已验证不是薄片。下一步应直接输出崩溃时刻的
+<code>Co</code>、<code>|U|</code>、<code>V</code>、<code>Ap=V/dt</code> 四张场，找"高 Co ∧ 小 V"的交集单元，
+再判断是压力方程病态还是相变源项刚性。</li>
+<li><b>Step 1 拉长到能量比 &lt;1.05 再取 T_int</b>。v8_1 已到 1.080，方向是对的，只差迭代；
+但请注意 v8_8 的代价是 5.2 倍。</li>
+</ol>
+
+<h3>P1 —— 用 v8_8 之前必须补</h3>
+<ol>
+<li>补一个 <code>generate_case_cht.py</code>：现在 CHT 字典靠人从 <code>caseCHT_qishi</code> 拷贝，
+换结构要手工改补丁名——这正是最容易出错的地方（<code>wall</code> vs <code>outer</code> vs <code>interface</code>）。</li>
+<li>把 <code>A_IN</code> 改成从 polyMesh 现算，并在 <code>preflight</code> 里加一条
+"入口面积 vs 配置值"的校验，偏差 &gt;1% 就 FAIL。</li>
+<li>在 <code>preflight</code> 里加一条：<code>coldWall</code> 若仍是 <code>uniform</code>（未映射）则 WARN，
+避免"忘了 map 就开跑"。</li>
+<li>修 README §三 的顺序：转换 → 先补 <code>system/controlDict</code> → 再 checkMesh。</li>
+<li>修 <code>run_all.sh</code>：删掉或重写成两步流程，并把指标统一到 <code>alphaRhoPhi.liquid</code>。</li>
+</ol>
+
+<h3>P2 —— 论文层面的假设必须写清</h3>
+<ol>
+<li><b>无浮升力</b>：Step 1 用 <code>rhoConst</code>，Gr/Re² ≈ 1.2 属混合对流区，这个近似要披露，
+建议至少做一组 <code>heRhoThermo + perfectGas</code> 的对照看 T_int 差多少。</li>
+<li><b>单向耦合</b>：凝液潜热未反馈给固体，冷板热流偏低。</li>
+<li><b>相变机理不同</b>：Fluent 是 Lee 温度驱动，OpenFOAM 是界面饱和 + 组分扩散。
+绝对值不可直接对比，只能比结构排序——这一点 README 已写对，应保留。</li>
+<li><b>Eulerian 分散相</b>对壁面膜状冷凝是近似；若要液膜形态须转 VOF。</li>
+</ol>
+
+<h2>十、最终判定</h2>
+
+<table>
+<thead><tr><th>问题</th><th>答复</th></tr></thead>
+<tbody>
+<tr><td>这个项目整体可靠吗？</td>
+<td><b>骨架可靠，结论不可用。</b>转换、门禁、映射三段工程实现扎实且可复现；
+但主结果（冷凝效率）一条都没有，Step 1 也还差一点收敛。属于"工具已经做好、实验还没做完"的状态。</td></tr>
+<tr><td>能处理 v8_8 的数据吗？</td>
+<td><b>网格与 Step 1 能，Step 2 不能。</b>我已实跑验证：转换 6m49s、两区 Mesh OK、门禁全 PASS、
+62,158 面映射 verify PASS。产出物 <code>caseCHT_v88</code> 可直接开跑 Step 1。
+但 Step 2 的阻塞是全项目性的，与几何无关。</td></tr>
+<tr><td>v8_8 的算例文件能复用吗？</td>
+<td><b>不能作为对比基准。</b>.dat.h5 是单相、绝热（T 恒 308.15 K）的流场基线，不含冷凝物理，
+且项目没有读取该格式的工具。</td></tr>
+<tr><td>最大风险是什么？</td>
+<td><b>把"跑通了"当成"算对了"。</b>三条具体隐患：①<code>coldWall</code> 忘了映射会静默产出过度冷却结果；
+②Step 1 未收敛就抽 T_int 会低估冷凝；③"薄片单元"这个错误根因会把人引向错误的修复方向。</td></tr>
+</tbody>
+</table>
+
+<div class="box note">
+<h4>本次留下的可复现产物</h4>
+<p><code>OpenFOAM\caseCHT_v88\</code>（326 MB）—— v8_8 的双区域 CHT 算例，已过 <code>preflight --checkmesh</code>，
+<code>startFrom latestTime</code>、<code>endTime 9000</code>，直接 <code>chtMultiRegionFoam</code> 即可。
+若不需要可整个删除，转换 7 分钟可重建。</p>
+<p>证据日志：<code>log.audit_convert_v88</code>、<code>log.audit_checkmesh_v88.txt</code>、
+<code>log.audit_checkmesh_v88_solid.txt</code>、<code>log.audit_checkmesh_v81.txt</code>。</p>
+</div>
+
+<footer>
+审计执行：2026-10-20 · 全部数值来自本机实跑与本审计的独立复算（h5py 直读 + Newell 面积 + 散度定理体积 +
+OpenFOAM 8 checkMesh + 场文件通量加权）。面积/体积口径与 <code>tools/ofmesh.py</code> 一致：
+向量面积 = Σcross/2，面积 = |v|，不再除以 2。
+</footer>
+
+</div>
+</body>
+</html>

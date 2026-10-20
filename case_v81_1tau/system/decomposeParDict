@@ -1,0 +1,22 @@
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      decomposeParDict;
+}
+// 16 物理核，按用户要求只用 50%
+numberOfSubdomains 8;
+
+method          scotch;
+
+// 备用几何分解（scotch 失败时改用：simpleCoeffs (4 2 1)）
+simpleCoeffs
+{
+    n           (4 2 1);
+    delta       0.001;
+}
+
+distributed     no;
+roots           ();

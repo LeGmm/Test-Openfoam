@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>QiShi_v8_1 Setup-Output 处理结果</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#161b22; --panel2:#1c232c; --line:#2a3340;
+    --tx:#e6edf3; --tx2:#9aa7b4; --ok:#3fb950; --warn:#d29922; --bad:#f85149; --acc:#58a6ff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+       font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.65}
+  .wrap{max-width:1080px;margin:0 auto;padding:36px 26px 64px}
+  h1{font-size:24px;margin:0 0 6px;font-weight:650}
+  .sub{color:var(--tx2);font-size:13px;margin-bottom:26px}
+  h2{font-size:16px;margin:34px 0 12px;padding-left:10px;border-left:3px solid var(--acc)}
+  p{font-size:14px;color:var(--tx)}
+  .mono{font-family:"Cascadia Mono",Consolas,monospace}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0 4px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--tx2);font-weight:500;font-size:12px;letter-spacing:.3px;
+     background:var(--panel);position:sticky;top:0}
+  td.num{font-family:"Cascadia Mono",Consolas,monospace;text-align:right}
+  tr:hover td{background:#12171d}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:12px 0}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;margin:14px 0}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+  .kpi .k{font-size:12px;color:var(--tx2);margin-bottom:4px}
+  .kpi .v{font-size:19px;font-weight:600;font-family:"Cascadia Mono",Consolas,monospace}
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid;margin-left:6px;vertical-align:2px}
+  .t-ok{color:var(--ok);border-color:#1f4d2a;background:#0f2417}
+  .t-bad{color:var(--bad);border-color:#5c2223;background:#2a1113}
+  .t-warn{color:var(--warn);border-color:#5c4415;background:#2a2010}
+  ul{margin:8px 0 8px 18px;padding:0}
+  li{font-size:14px;margin:5px 0}
+  code{background:#20272f;padding:1px 6px;border-radius:5px;font-size:12.5px;
+       font-family:"Cascadia Mono",Consolas,monospace;color:#c9d6e4}
+  .note{font-size:13px;color:var(--tx2);margin-top:6px}
+  .bad-item{border-left:3px solid var(--bad);background:#1a1214}
+  .bad-item h3{font-size:14px;margin:0 0 6px;color:#ffb3ae}
+  .foot{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--tx2)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>FLTG.1-Setup-Output.cas.h5 处理结果</h1>
+<div class="sub">
+  输入：<span class="mono">QiShi_v8_1_20261009/qishi_v8_1_files/dp0/FLTG/Fluent/FLTG.1-Setup-Output.cas.h5</span>（22.5 MB，2026-10-20 12:52 导出）<br>
+  工具链：<span class="mono">OpenFOAM/tools/</span>　·　求解器：blueCFD-Core 2020 / OpenFOAM 8　·　时间：2026-10-20 14:10
+</div>
+
+<div class="grid">
+  <div class="kpi"><div class="k">源网格</div><div class="v">125116 单元</div><div class="note">565463 节点 / 740152 面</div></div>
+  <div class="kpi"><div class="k">流固界面面积</div><div class="v">107.910 cm²</div><div class="note">9459↔9459 面，面心零偏差</div></div>
+  <div class="kpi"><div class="k">checkMesh</div><div class="v" style="color:var(--ok)">Mesh OK</div><div class="note">两区域 Failed 0</div></div>
+  <div class="kpi"><div class="k">能否用于求解</div><div class="v" style="color:var(--ok)">能</div><div class="note">捏点不挡路，共轭已接通</div></div>
+</div>
+
+<h2>一、转换结果（脚本全部跑通）</h2>
+<p>两条转换脚本都正常识别几何，自动判别流体区为 <code>zone-----</code>(873)、固体区为 <code>____-_</code>(876)（Workbench 把中文名压成了下划线）。</p>
+
+<table>
+<thead><tr><th>区域 / 补丁</th><th class="num">面数</th><th class="num">面积 cm²</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td>fluid 单元总数</td><td class="num">64729</td><td class="num">53.16 cm³</td><td>348446 面（内部 333753）/ 247357 节点</td></tr>
+<tr><td>&nbsp;&nbsp;inlet</td><td class="num">2573</td><td class="num">1.130</td><td>y=+30 平面，x≈+12 mm</td></tr>
+<tr><td>&nbsp;&nbsp;outlet</td><td class="num">2558</td><td class="num">1.130</td><td>y=+30 平面，x≈−17.5 mm</td></tr>
+<tr><td>&nbsp;&nbsp;fluid_to_solid</td><td class="num">9459</td><td class="num">107.910</td><td>mappedWall 共轭界面</td></tr>
+<tr><td>&nbsp;&nbsp;wall</td><td class="num">103</td><td class="num">0.341</td><td>y=−30 底面</td></tr>
+<tr><td>solid 单元总数</td><td class="num">60387</td><td class="num">52.90 cm³</td><td>391706 面（内部 364364）/ 318430 节点</td></tr>
+<tr><td>&nbsp;&nbsp;solid_to_fluid</td><td class="num">9459</td><td class="num">107.910</td><td>与流体侧面心偏差 0.000000 mm</td></tr>
+<tr><td>&nbsp;&nbsp;coldWall</td><td class="num">7624</td><td class="num">16.000</td><td>= Fluent wall_cool（5 ℃ 面）</td></tr>
+<tr><td>&nbsp;&nbsp;outer</td><td class="num">10259</td><td class="num">128.628</td><td>其余外表面</td></tr>
+</tbody>
+</table>
+<p class="note">面积与 MEMORY 里 v8_12 的实测口径完全一致（16.00 / 128.63 / 107.9），可确认同一几何族。Step 2 的单区域算例 <span class="mono">case_qishi/</span> 也已生成，coldWall 9459 面就位。</p>
+
+<h2>二、质量门</h2>
+<table>
+<thead><tr><th>检查</th><th>fluid</th><th>solid</th><th>结论</th></tr></thead>
+<tbody>
+<tr><td>checkMesh</td><td class="mono">Mesh OK</td><td class="mono">Mesh OK</td><td><span class="tag t-ok">通过</span></td></tr>
+<tr><td>非流形双连接面</td><td class="mono">1 对</td><td class="mono">0</td><td><span class="tag t-bad">未通过</span></td></tr>
+<tr><td>check_face_orientation</td><td class="mono">CONFORMS</td><td class="mono">CONFORMS</td><td><span class="tag t-ok">通过</span></td></tr>
+<tr><td>薄层单元（V&lt;1e-11 m³）</td><td class="mono">7625（11.8%）</td><td class="mono">1290（2.1%）</td><td><span class="tag t-bad">劣质</span></td></tr>
+<tr><td>非正交 / 最大偏斜</td><td class="mono">53.3° / 3.54</td><td class="mono">66.4° / 2.57</td><td><span class="tag t-ok">可接受</span></td></tr>
+</tbody>
+</table>
+
+<h2>三、求解实测（chtMultiRegionFoam，Step 1）</h2>
+<div class="card">
+<p style="margin:0 0 8px"><b>最终状态（15:30）：共轭传热已打通，网格未做任何手术。</b></p>
+<ul>
+<li>Δt = 2e-5 s，15 步 / 3e-4 s：<b>Co<sub>max</sub> = 0.059</b>，零 FATAL</li>
+<li>m<sub>in</sub> = −1.99985074e-5、m<sub>out</sub> = +1.99985078e-5 kg/s —— 质量守恒到 1e-12</li>
+<li>T<sub>fluid</sub> 300.00 → 308.15 K（贴冷壁处 300 K），T<sub>solid</sub> 278.15 → 300.01 K</li>
+<li><b>Q<sub>interface</sub> = −14.2 W</b>（此前 ≡ 0）；T<sub>out</sub> 307.92 &lt; T<sub>in</sub> 308.15 → 流体确实在放热</li>
+</ul>
+<p style="margin:10px 0 0;color:#9aa7b4;font-size:13px">过程记录：Δt = 1.75e-4 时第 2 步从出口炸（|U|→1.5e4 m/s、Co 2.8e4），崩点全在出口面下
+x −21…−12 mm 的薄片单元；捏点单元全程 308.15 K、|U|≈2 m/s，与崩溃无关。</p>
+</div>
+
+<h2>四、结论（15:30 更新：捏点翻案）</h2>
+
+<div class="card" style="border-left:3px solid #3fb950;background:#111a14">
+<h3 style="font-size:14px;margin:0 0 6px;color:#7ee787">① 捏点不是缺陷 —— 不用修，也不该修</h3>
+<p style="margin:0">那两张"重复面"其实不是重合面：中心相距 <span class="mono">0.26 mm</span>、面积 <span class="mono">0.247 / 0.022 mm²</span>、
+节点集也不同（7 节点 vs 3 节点）——是同一对单元在<b>两处独立接触</b>，属合法的多面体配置。
+术前 checkMesh 报 <code>Max cell openness = 3.03e-16 OK</code>，说明每个单元都是闭合的。
+<code>multiple in between faces</code> 只是拓扑提示，不是 FAIL。<br>
+三种"修法"实测全部反证：<br>
+· 删掉小的那张面 → 两单元出现 2.4% 开口（<code>Failed 1: open cells 2</code>）<br>
+· 把这对单元并成一个 → 立刻冒出 7 对新的多面连接，级联到 <b>36352 单元（56% 网格）</b><br>
+· 旧 <code>merge_dup_cells.py</code> 正是这个级联逻辑，实测 64729 → 28378 单元，网格被毁</p>
+</div>
+
+<div class="card">
+<h3 style="font-size:14px;margin:0 0 6px;color:#d29922">② 出口面下的薄片单元 —— 靠时间步解决，已稳</h3>
+<p style="margin:0">流体 7625 个单元体积 &lt; 1e-11 m³（占 11.8%，均值 8.2e-10），最小 8.8e-13，全在 y≈+30 mm 进出口平面下。
+Δt = 1.75e-4 时压力修正被这些单元放大而炸开；<b>Δt = 2e-5 后 Co<sub>max</sub> 仅 0.059，稳定</b>。
+想让 Δt 回到 1e-4 量级，需在 Fluent 侧给进出口面加密一层，但这不是求解前提。</p>
+</div>
+
+<div class="card" style="border-left:3px solid #3fb950;background:#111a14">
+<h3 style="font-size:14px;margin:0 0 6px;color:#7ee787">③ 共轭界面曾完全不传热 —— 已修好</h3>
+<p style="margin:0">原配置两侧界面都是 <code>zeroGradient</code>（Q_interface ≡ 0）；且 OF8 的
+<code>compressible::turbulentTemperatureCoupledBaffleMixed</code> <b>按 patch 名配对</b>，
+而转换器给的是 <code>fluid_to_solid</code> / <code>solid_to_fluid</code> 两个不同名字。
+已用 <code>tools/setup_cht_coupling.py</code> 修：两侧统一改名为 <code>interface</code>、补丁保持
+<code>mappedWall</code>（写 <code>wall</code> 会 FATAL "'...' not type 'mappedPatchBase'"）、0/T 写 coupledBaffleMixed。
+另修一处：<code>0/fluid/p</code> 初值必须为 <b>0</b>，写 101325 会让 h=e+p/ρ 把 T 假抬 +88 K（这正是之前 401 K 的来源）。</p>
+</div>
+
+<h2>五、下一步</h2>
+<table>
+<thead><tr><th>优先级</th><th>动作</th><th>归属</th></tr></thead>
+<tbody>
+<tr><td><span class="tag t-ok">P0</span></td><td>把 endTime 从 3e-4 拉长到稳态（或开 adjustTimeStep + maxCo 0.5），取收敛后的界面温度</td><td>tools 侧</td></tr>
+<tr><td><span class="tag t-warn">P1</span></td><td>转换器内置 setup_cht_coupling 的改名+BC 逻辑（现在是一次性脚本）</td><td>tools 侧</td></tr>
+<tr><td><span class="tag t-warn">P1</span></td><td>map_interface_T.py 的 patch 名与 SOP 文档同步改成 <code>interface</code></td><td>tools 侧</td></tr>
+<tr><td><span class="tag t-ok">P2</span></td><td>想让 checkMesh 100% 无提示：Fluent 里把那处"两处接触"改成面接触或留 0.05 mm 间隙（只消警告，不影响结果）</td><td>可选</td></tr>
+</tbody>
+</table>
+
+<div class="foot">
+产物：<span class="mono">caseCHT_qishi/</span>（双区域，已接通共轭，dt=2e-5）、
+<span class="mono">case_qishi/</span>（Step 2 单区域）；
+新增工具 <span class="mono">tools/setup_cht_coupling.py</span>；
+日志 <span class="mono">caseCHT_qishi/log.final</span>。
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Step2 阻塞根因与修复 · v8_1 / v8_8 跑通方案</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232c; --line:#2a323d;
+    --tx:#e6edf3; --tx2:#9aa7b4; --tx3:#6e7b8a;
+    --ok:#3fb950; --warn:#d29922; --bad:#f85149; --info:#58a6ff; --acc:#bc8cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--tx);
+       font:15px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;}
+  .wrap{max-width:1060px;margin:0 auto;padding:46px 28px 80px;}
+  header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:32px;}
+  .kicker{color:var(--info);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px}
+  h1{font-size:28px;line-height:1.35;margin:0 0 12px;font-weight:650;letter-spacing:-.01em}
+  .meta{color:var(--tx3);font-size:13px}
+  h2{font-size:19px;margin:42px 0 14px;padding-left:11px;border-left:3px solid var(--info);font-weight:620}
+  h3{font-size:15.5px;margin:24px 0 10px;font-weight:620}
+  p{margin:10px 0}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:6px 0}
+  code{font-family:"Cascadia Mono",Consolas,monospace;font-size:13px;
+       background:var(--panel2);padding:1.5px 5px;border-radius:4px;color:#c9d1d9}
+  table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13.6px}
+  th{background:var(--panel2);color:var(--tx2);font-weight:600;text-align:left;
+     padding:9px 11px;border-bottom:1px solid var(--line);white-space:nowrap}
+  td{padding:8px 11px;border-bottom:1px solid #1f262f;vertical-align:top}
+  tr:hover td{background:#141a21}
+  .num{font-family:"Cascadia Mono",Consolas,monospace;text-align:right;white-space:nowrap}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)} .dim{color:var(--tx3)}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin:16px 0}
+  .box.good{border-color:rgba(63,185,80,.4);background:linear-gradient(180deg,rgba(63,185,80,.07),var(--panel))}
+  .box.hi{border-color:rgba(248,81,73,.4);background:linear-gradient(180deg,rgba(248,81,73,.07),var(--panel))}
+  .box.note{border-color:rgba(88,166,255,.35);background:linear-gradient(180deg,rgba(88,166,255,.06),var(--panel))}
+  .box h4{margin:0 0 8px;font-size:14.5px}
+  .box p{margin:6px 0;font-size:14px;color:var(--tx2)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:18px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:13px 15px}
+  .stat .k{color:var(--tx3);font-size:12px;margin-bottom:5px}
+  .stat .v{font-size:19px;font-weight:640;font-family:"Cascadia Mono",Consolas,monospace}
+  .stat .s{color:var(--tx3);font-size:11.5px;margin-top:3px}
+  pre{background:#0b0f14;border:1px solid #212832;border-radius:8px;padding:14px 16px;
+      overflow-x:auto;font-family:"Cascadia Mono",Consolas,monospace;font-size:12.6px;line-height:1.65;color:#c9d1d9}
+  pre .c{color:var(--tx3)}
+  footer{margin-top:52px;padding-top:18px;border-top:1px solid var(--line);color:var(--tx3);font-size:12.5px}
+  .formula{font-family:"Cascadia Mono",Consolas,monospace;font-size:12.8px;color:var(--tx2);
+           background:#11161c;border:1px solid #212832;border-radius:7px;padding:10px 13px;margin:12px 0;overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="kicker">Root cause · 已修复并验证</div>
+  <h1>Step 2 阻塞根因，以及 v8_1 / v8_8 两套结构怎么跑出来</h1>
+  <div class="meta">2026-10-20 · 结论全部来自本机实跑：源码定位 → 单点修复 → 前后对比 → 新门禁 → 两结构启动验证</div>
+</header>
+
+<h2>一、结论</h2>
+
+<div class="box good">
+<h4>阻塞不是网格，是压力参考口径差了一个大气压——已修好。</h4>
+<p>Step 2 从「第二步就 SIGFPE」变成「Co 稳在 0.29、连跑 20 ms 零 FATAL」，只改了 <code>0/p_rgh</code> 的参考压。
+1000 倍之外还在稳定推进，v8_1 与 v8_8 都验证过启动段。</p>
+</div>
+
+<table>
+<thead><tr><th>结构</th><th>修复前</th><th>修复后（实测）</th></tr></thead>
+<tbody>
+<tr><td>v8_1（64,729 单元）</td>
+    <td class="bad">Co 0.0055 → <b>143.0</b>，第二步 SIGFPE，只写出 0 / 2e-06</td>
+    <td class="ok">推进到 <b>0.02 s</b>（旧崩溃点的 10,000 倍），Co max 0.29，dt 自动涨到 6.1e-5</td></tr>
+<tr><td>v8_8（444,474 单元）</td>
+    <td class="dim">同样表压口径，必然同样崩</td>
+    <td class="ok">推进到 1e-05，Co max 0.006，零 FATAL，26 s/步</td></tr>
+</tbody>
+</table>
+
+<div class="grid">
+  <div class="stat"><div class="k">根因</div><div class="v">p_rgh 口径</div><div class="s">绝压 vs 表压差 1 atm</div></div>
+  <div class="stat"><div class="k">密度后果</div><div class="v">÷9.8</div><div class="s">1.145 → 0.117 kg/m³</div></div>
+  <div class="stat"><div class="k">速度尖峰</div><div class="v">3120 m/s</div><div class="s">第一步内产生</div></div>
+  <div class="stat"><div class="k">改动量</div><div class="v">3 个文件</div><div class="s">生成器 / 热启动 / 门禁</div></div>
+</div>
+
+<h2>二、根因：源码级的铁证</h2>
+
+<p>OF8 的 <code>multiphaseEulerFoam</code> 在每个压力修正步无条件执行（<code>pU/pEqn.H:391</code>）：</p>
+
+<div class="formula">
+p = max(p_rgh + rho*gh, pMin);      // ← 每步都算，p 被 p_rgh 完全决定
+p_rgh = p - rho*gh;
+forAll(phases, phasei) { ... rho() += psi()*(p_rgh - p_rgh_0); }   // 密度按 p 更新
+</div>
+
+<p>也就是说：<b><code>p_rgh</code> 在这个求解器里就是绝对压力</b>，<code>0/p</code> 里写的 101325 第一步就被覆盖。
+气相是 <code>perfectGas</code>，密度由 <code>p</code> 算出。官方教程
+<code>laminar/bubbleColumnEvaporating/0/p_rgh</code> 也正是 <code>uniform 1e5</code> + 出口 <code>prghPressure p=1e5</code>。</p>
+
+<p>而项目的生成器写的是 <b>p = 101325 / p_rgh = 0</b>（表压口径）。于是：</p>
+
+<div class="formula">
+p_rgh ≈ 0.045 Pa  →  p = max(0.045 + ρgh, <b>pMin=10000</b>) = 10000 Pa
+ρ = p/(RT) = 10000/(287×297) = <b>0.117 kg/m³</b>   （应为 1.145，差 9.8 倍）
+出口 p_rgh 固定 0，内部 ~1e4  →  一个步长内速度 = 3120 m/s  →  FOAM_SIGFPE
+</div>
+
+<h3>现象与根因逐条对上</h3>
+<table>
+<thead><tr><th>实测现象</th><th>用「压力口径错」如何解释</th></tr></thead>
+<tbody>
+<tr><td>崩在<b>第一个时间步内</b>（t=2e-6 时 Co 已 143）</td><td>初始场不自洽，不是稳定性极限，所以调 dt 没用</td></tr>
+<tr><td>爆点全在 <code>y≈+30 mm</code> 出口/入口平面下 0.2 mm 的一层</td><td>那里正对固定压力边界，压力落差集中在这一层</td></tr>
+<tr><td><code>T.gas</code> 出现 <b>−0.70 K</b> 与 1037 K（1,904 个单元）</td><td>速度 3120 m/s 使动能 ½U²≈5e6 J/kg 压过内能，焓方程反解出负温</td></tr>
+<tr><td>1,904 个异常单元 <b>100%</b> 落在 y∈[29.71, 29.91] mm</td><td>局部事件，不是全场失稳</td></tr>
+<tr><td>关掉相变照样崩</td><td>因为与相变无关</td></tr>
+<tr><td><code>ΣY(air+H2O) = 1.0000</code> 处处成立</td><td>不是组分失衡</td></tr>
+</tbody>
+</table>
+
+<div class="box hi">
+<h4>为什么之前一直没找到</h4>
+<p>因为 <code>case_qishi/0</code> 是<b>热启动过的</b>：<code>0/p_rgh</code> 不是 <code>uniform 0</code>，而是 64,729 个
+≈0.045 Pa 的值（从 Step1 的零参考场直接拷过来的）。这个数字看起来"像那么回事"，
+又小到不会让人警觉，于是被当成动压而不追问它的参考基准。而 <code>0/p</code> 是 101325——两者相差整整一个大气压。</p>
+</div>
+
+<h2>三、改了什么（可复现）</h2>
+
+<table>
+<thead><tr><th>文件</th><th>改动</th><th>作用</th></tr></thead>
+<tbody>
+<tr><td><code>tools/generate_case.py</code></td>
+    <td><code>field_p_rgh()</code>：<code>uniform 0</code> → <code>uniform 101325</code>；出口
+        <code>fixedValue 0</code> → <code>prghPressure p=101325</code>。函数注释写明源码依据。</td>
+    <td class="ok">以后新生成的算例不会再踩</td></tr>
+<tr><td><code>tools/warmstart_step2.py</code></td>
+    <td>拷 <code>p_rgh</code> 时统一 <code>+101325</code>（新增 <code>P_OP</code> 常数并打印 SHIFT 行）</td>
+    <td class="ok">Step1（零参考）→ Step2（绝压）自动换算</td></tr>
+<tr><td><code>tools/preflight.py</code></td>
+    <td>新增门禁 11 <code>pressure</code>：单区域多相算例检查 <code>0/p_rgh</code> 是否 &lt; 10×pMin、
+        出口是否 <code>fixedValue 0</code></td>
+    <td class="ok">跑前 2 秒拦住，不再"跑完才发现白跑"</td></tr>
+</tbody>
+</table>
+
+<p>门禁实测效果：</p>
+<pre><span class="c"># 旧算例（表压口径）</span>
+[FAIL] pressure   0/p_rgh internalField ≈ 0 Pa（pMin=10000）
+      → 这是表压口径。multiphaseEulerFoam 要求绝压，否则 p 被 pMin 夹住、密度塌 10 倍、第一步即 SIGFPE。
+
+<span class="c"># 修正后</span>
+[PASS] pressure   0/p_rgh internalField ≈ 101325 Pa（pMin=10000），绝压口径正确</pre>
+
+<h2>四、跑通走到哪一步了</h2>
+
+<h3>v8_1：20 ms，指标光滑</h3>
+<table>
+<thead><tr><th class="num">t</th><th class="num">mdot_cond</th><th class="num">T_out</th><th class="num">Y_H2O_out</th><th class="num">Δp</th></tr></thead>
+<tbody>
+<tr><td class="num">0.002</td><td class="num">1.54e-08</td><td class="num">298.39</td><td class="num">0.02042</td><td class="num">0.09 Pa</td></tr>
+<tr><td class="num">0.008</td><td class="num">9.52e-09</td><td class="num">298.07</td><td class="num">0.02006</td><td class="num">0.13 Pa</td></tr>
+<tr><td class="num">0.014</td><td class="num">3.76e-09</td><td class="num">297.88</td><td class="num">0.01983</td><td class="num">0.09 Pa</td></tr>
+<tr><td class="num">0.020</td><td class="num warn">−3.9e-11</td><td class="num">297.80</td><td class="num">0.01971</td><td class="num">0.08 Pa</td></tr>
+</tbody>
+</table>
+
+<p>单调、无振荡、无尖峰，压力从头到尾是光滑的——数值上是健康的。</p>
+
+<h3>v8_8：启动段通过</h3>
+<p>444,474 单元、62,158 面冷凝壁，冷壁先用 <code>uniform 278.15</code>（比映射后的真实分布更狠，属保守测试）：
+5 步到 1e-05，Co max 0.0061，26 s/步，零 FATAL。算例 <code>case_v88</code> 已过全部门禁。</p>
+
+<h2>五、"正确跑出来"还差三件事（都不是数值问题）</h2>
+
+<h3>① 物理时间远远不够</h3>
+<div class="formula">
+V_fluid = 51.9 cm³      Q = 17.47 cm³/s      τ = V/Q = <b>2.97 s</b>
+</div>
+<p>现在只跑了 20 ms = <b>0.7% 个停留时间</b>。要让出口指标代表"这个结构的冷凝能力"，
+至少要 1 个 τ（≈3 s），最好 2 个 τ 看是否走平。这决定了工时，见第六节。</p>
+
+<h3>② 出口凝液流率这个指标会读成 0</h3>
+<p><code>mdot_cond</code> 从 1.54e-08 一路衰减到 <b>−3.9e-11</b>（约等于 0）。原因不是没冷凝，
+而是<b>凝液在冷壁上积着、排不到出口</b>：<code>coldWall</code> 的 <code>alpha.liquid</code> 是 <code>zeroGradient</code>、
+<code>U</code> 是 <code>noSlip</code>，没有壁面液膜/排液模型，凝液贴着壁面不动。</p>
+<p>现在的冷凝量其实可以从气相侧闭合出来：入口水蒸气 5.783e-07 kg/s，出口约 3.94e-07 kg/s，
+差 <b>1.8e-07 kg/s（32%）</b>——但先别急着用这个数，见下一条。</p>
+
+<h3>③ 初始组分场是被"人工饱和"过的</h3>
+<p><code>warmstart_step2.py</code> 的 <code>--no-yinit</code> 默认逻辑是
+<code>Y0 = min(Y_inlet, Y_sat(T))</code>，所以 <code>0/H2O.gas</code> 的范围是 0.0055~0.0289（中位 0.0191），
+冷的单元一开始就已经"凝到饱和"。这意味着<b>前一个 τ 内的冷凝量不是物理结果</b>，是初场残留。
+必须先跑到 1τ 以上再看数，并且论文里要说明这一步。</p>
+
+<div class="box note">
+<h4>顺带一个量级校核</h4>
+<p>种子液相 α_l=1e-6 全域 → 液相总质量 <b>51.8 µg</b>；20 ms 内实际凝结约 3.7 µg（7%）。
+所以早期 α_l 场里 93% 是种子，<b>不能拿 α_l 云图当"凝液分布"用</b>——至少要跑到 0.3 s
+（种子等效时间）之后，或者把种子降到 1e-8 并重验稳定性。</p>
+</div>
+
+<h2>六、完整可执行流程与工时</h2>
+
+<h3>v8_1（已有 Step1，可直接续）</h3>
+<pre><span class="c"># 1) Step1 续算到能量比 &lt;1.05（现 9000 迭代 1.080）</span>
+$PY tools/preflight.py caseCHT_qishi
+$PY tools/of8.py caseCHT_qishi "chtMultiRegionFoam &gt; log.cht2 2&gt;&amp;1"
+
+<span class="c"># 2) 提取 T_int 并映射（verify 必须 PASS）</span>
+$PY tools/map_interface_T.py extract caseCHT_qishi/constant/fluid/polyMesh \
+    &lt;t_final&gt;/fluid/T interface _interface_T_v81.csv
+$PY tools/map_interface_T.py verify _interface_T_v81.csv case_qishi/constant/polyMesh coldWall
+$PY tools/map_interface_T.py map _interface_T_v81.csv case_qishi/constant/polyMesh coldWall case_qishi/0/T.gas
+$PY tools/map_interface_T.py map _interface_T_v81.csv case_qishi/constant/polyMesh coldWall case_qishi/0/T.liquid
+
+<span class="c"># 3) 压力口径（关键）—— case_qishi/0/p_rgh 已就地改好，原文件存 p_rgh.bak</span>
+<span class="c">#   内部 +101325、出口改 prghPressure 101325。若日后重跑 generate_case.py，</span>
+<span class="c">#   它会覆盖 0/（连同映射好的冷壁温度），所以重生成后必须重做第 2 步映射。</span>
+$PY tools/preflight.py case_qishi          <span class="c"># 必须看到 [PASS] pressure</span>
+
+<span class="c"># 4) 跑 2τ</span>
+<span class="c">#   controlDict: endTime 6; adjustTimeStep yes; maxCo 0.3; maxDeltaT 1e-3; writeInterval 0.1</span>
+$PY tools/of8.py case_qishi "multiphaseEulerFoam &gt; log.step2 2&gt;&amp;1"</pre>
+
+<h3>v8_8（Step1 还没跑过）</h3>
+<pre><span class="c"># 1) Step1：caseCHT_v88 已就绪（preflight --checkmesh 全 PASS）</span>
+$PY tools/preflight.py caseCHT_v88 --checkmesh
+$PY tools/of8.py caseCHT_v88 "chtMultiRegionFoam &gt; log.cht 2&gt;&amp;1"
+<span class="c">#   守恒核对 postProcessing/fluid/{m_in,m_out,T_in,T_out,Q_interface}
+#    能量比 &lt;1.05 才算收敛</span>
+
+<span class="c"># 2) 提取 + 映射到 case_v88（62,158 面，verify 约 100 s / 秒级内存 763 MB）</span>
+$PY tools/map_interface_T.py extract caseCHT_v88/constant/fluid/polyMesh \
+    &lt;t_final&gt;/fluid/T interface _interface_T_v88.csv
+$PY tools/map_interface_T.py verify _interface_T_v88.csv case_v88/constant/polyMesh coldWall
+$PY tools/map_interface_T.py map _interface_T_v88.csv case_v88/constant/polyMesh coldWall case_v88/0/T.gas
+$PY tools/map_interface_T.py map _interface_T_v88.csv case_v88/constant/polyMesh coldWall case_v88/0/T.liquid
+
+<span class="c"># 3) 热启动（p_rgh 会自动 +101325）</span>
+$PY tools/warmstart_step2.py caseCHT_v88 &lt;t_final&gt; case_v88
+$PY tools/preflight.py case_v88            <span class="c"># 必须 PASS pressure</span>
+
+<span class="c"># 4) 跑 2τ</span>
+$PY tools/of8.py case_v88 "multiphaseEulerFoam &gt; log.step2 2&gt;&amp;1"</pre>
+
+<h3>工时（按本次实测速率外推，单核）</h3>
+<table>
+<thead><tr><th>阶段</th><th class="num">v8_1</th><th class="num">v8_8</th><th>依据</th></tr></thead>
+<tbody>
+<tr><td>Step1 到能量比 &lt;1.05</td><td class="num">1.5–3 h</td><td class="num">6–9 h</td>
+    <td>v8_1 0.49 s/外迭代；v8_8 单元 5.2×</td></tr>
+<tr><td>Step2 到 1τ (3 s)</td><td class="num">~18 h</td><td class="num">~72 h</td>
+    <td>v8_1 实测 18 ms / 19.6 min；v8_8 26 s/步、dt 1e-4</td></tr>
+<tr><td>Step2 到 2τ (6 s)</td><td class="num">~36 h</td><td class="num">~145 h</td><td>线性外推</td></tr>
+<tr><td><b>16 核 MPI（若 8×）</b></td><td class="num ok">4–5 h /τ</td><td class="num ok">9–10 h /τ</td>
+    <td>MS-MPI 已装、16 物理核；<b>尚未在本 build 上验证并行</b></td></tr>
+</tbody>
+</table>
+
+<div class="box note">
+<h4>并行是必选项，不是优化项</h4>
+<p><code>C:\Program Files\Microsoft MPI\Bin\mpiexec.exe</code> 在位，机器 16 核。
+建议先在一个短算例上做 <code>decomposePar</code> + <code>mpiexec -np 8</code> 的可用性与加速比标定，
+再决定 8 结构批量怎么排。按 8× 估计，<b>两套结构各跑到 2τ 合计约 1.5 天</b>；单核则要两周以上。</p>
+</div>
+
+<div class="box note">
+<h4>另外两个会被磁盘和内存咬到的细节</h4>
+<p>① <code>generate_case.py</code> 写的是 <code>writeFormat ascii</code>。v8_8 一次写盘实测 <b>218 MB</b>
+（444k 单元 × 13 个场，10 位精度）——跑 2τ 写 60 次就是 13 GB。改成 <code>binary</code> 直接降到 1/8 左右。</p>
+<p>② 界面映射的 <code>verify</code>/<code>map</code> 在 62,158 面时单块临时数组约 763 MB、耗时 101 s；
+v8_8 跑起来后再做映射要留够内存。</p>
+</div>
+
+<h2>七、还没解决、但必须知道的</h2>
+<table>
+<thead><tr><th>项</th><th>状态</th><th>影响</th></tr></thead>
+<tbody>
+<tr><td><code>wallHeatFlux</code> 函数对象</td>
+    <td class="bad">实测 FATAL：<code>Unable to find compressible turbulence model</code></td>
+    <td>冷壁换热量 Q_wall 拿不到，能量闭合只能用气相焓平衡间接核对；需另写后处理或给层流多相配 thermo 输运模型</td></tr>
+<tr><td>凝液排液</td><td class="warn">壁上 <code>zeroGradient</code> + <code>noSlip</code>，无液膜模型</td>
+    <td>出口凝液流率读成 0；要么改用气相侧闭合，要么加壁面排液边界</td></tr>
+<tr><td>初始 Y0 人工饱和</td><td class="warn">warmstart 默认行为</td>
+    <td>前 1τ 的冷凝量不可用；论文须说明</td></tr>
+<tr><td>Step1 无浮升力（rhoConst）</td><td class="warn">Gr/Re²≈1.2 混合对流</td>
+    <td>T_int 分布被低估自然对流；建议做一组 perfectGas 对照</td></tr>
+<tr><td>单向耦合</td><td class="warn">设计如此</td>
+    <td>凝液潜热不反馈固体，冷板热流偏低</td></tr>
+<tr><td>v8_8 空腔处理</td><td class="dim">固体外表面 128.6 cm² 全部按绝热 outer</td>
+    <td>若空腔实际有导热通路，Step1 会偏低；需 ParaView 核一次</td></tr>
+</tbody>
+</table>
+
+<h2>八、直接回答</h2>
+
+<table>
+<thead><tr><th>问题</th><th>答复</th></tr></thead>
+<tbody>
+<tr><td>阻塞解决了吗？</td>
+    <td><b>解决了。</b>不是靠调参绕过，是找到了错了一个大气压的压力参考并修掉，源码级证据 + 前后对比都在。</td></tr>
+<tr><td>v8_1 能跑出来吗？</td>
+    <td><b>能。</b>Step1 再 1–3 h 到位，Step2 已证明稳定；单核 1τ 约 18 h，16 核约 5 h。</td></tr>
+<tr><td>v8_8 能跑出来吗？</td>
+    <td><b>能，但贵。</b>网格与 Step1 已全部就绪（<code>caseCHT_v88</code> / <code>case_v88</code> 均过门禁），
+    缺 Step1 实跑（6–9 h）与 Step2 长时间（1τ 单核 72 h / 16 核约 10 h）。</td></tr>
+<tr><td>现在就能拿去写论文吗？</td>
+    <td><b>还不能。</b>缺三样：Step1 能量比 &lt;1.05、Step2 跑满 1–2τ、以及把凝液指标从"出口液相流率"
+    改成"气相侧水蒸气收支"（现在这个读成 0）。</td></tr>
+<tr><td>下一步最该做什么？</td>
+    <td>① 在 v8_1 上跑满 1τ 看看出口指标是否走平（这是验证整套设置的最后一道）；② 同时标定 MPI 加速比。</td></tr>
+</tbody>
+</table>
+
+<footer>
+本文所有数值来自本机实跑：<code>log.diag_step2.txt</code>（崩溃复现）、<code>log.diag_step2b.txt</code>（4 步）、
+<code>log.diag_step2c.txt</code>（2 ms）、<code>log.diag_step2d.txt</code>（20 ms）、<code>log.diag_v88_step2.txt</code>（v8_8 启动段）。
+源码依据：<code>OpenFOAM-8/applications/solvers/multiphase/multiphaseEulerFoam/multiphaseEulerFoam/pU/pEqn.H:391</code>。
+</footer>
+
+</div>
+</body>
+</html>

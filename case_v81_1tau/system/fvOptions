@@ -1,0 +1,39 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  8                                     |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvOptions;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// 2026-10-21 00:30  P0-1 候选修复①：液相温度发散（0.0467 s FATAL，T0<0）的数值限幅
+// 只钳制 he（等价于 T），不改相变/动量模型；若 0.1 s 门禁通过再评估是否用于 1τ。
+// 物理上必须披露：极小 α_l 单元的温度被人为限制在 250–400 K。
+limitT.gas
+{
+    type            limitTemperature;
+    selectionMode   all;
+    min             250;
+    max             400;
+    phase           gas;
+}
+
+limitT.liquid
+{
+    type            limitTemperature;
+    selectionMode   all;
+    min             250;
+    max             400;
+    phase           liquid;
+}
+
+// ************************************************************************* //
