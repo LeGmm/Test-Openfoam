@@ -155,6 +155,154 @@ def read_thermo(case: str, region: str = "fluid") -> dict:
     return out
 
 
+# ── 分区集总（zoned lumped）求解 ───────────────────────────────────────────
+def zoned_condensation(Tw: np.ndarray, area: np.ndarray, q: np.ndarray,
+                       UA_total: float, m_da: float, w_in: float,
+                       rho: float, cp: float, nband: int = 10,
+                       t_in: float = 308.15, le: float = LE, p: float = P_OP,
+                       cp_l: float = 4218.0, h_fg0: float = 2.501e6,
+                       cp_v: float = 1860.0, cp_a: float = 1006.0) -> dict:
+    """按壁面温度分带求解冷凝：修掉「单一平均壁温」在温度分布很宽时失效的问题（A4）。
+
+    单一平均壁温为什么不行：v8_8 的界面温度标准差 2.86 K、中位 283.6 K 高于干工况
+    出口 280.4 K，若取中位壁温算对数平均温差会得到负温差、数学上无定义；取面积加权
+    均值（279.8 K，低于中位）则会把 ΔT 算大、UA 算大、冷凝量偏高。
+
+    做法：
+      ① 按壁面温度升序把界面切成 nband 个【等面积】带（等面积而非等温差，
+         避免偏态分布下出现空带）；
+      ② 每带的热导按「该带的壁面热流积分份额」分配总 UA——即认为热流的
+         *相对分布* 可信、*绝对量* 用守恒的焓平衡校正；
+      ③ 气相按全混（出口状态）处理，逐带算显热与 Stefan 扩散传质，
+         先解质量方程（与出口温度解耦）再解能量方程，两个一维二分，无迭代振荡。
+
+    返回：每带明细 + 冷凝量 / 出口含湿量 / 湿工况出口温度 + 出口饱和度校核。
+    """
+    order = np.argsort(Tw)
+    Tw_s, A_s, qA_s = Tw[order], area[order], (q * area)[order]
+    cum = np.cumsum(A_s)
+    cuts = np.searchsorted(cum, np.linspace(0.0, cum[-1], nband + 1)[1:-1])
+    bands = []
+    for ii in np.split(np.arange(len(Tw_s)), cuts):
+        if len(ii) == 0:
+            continue
+        bands.append([float(np.average(Tw_s[ii], weights=A_s[ii])),   # 壁温
+                      float(A_s[ii].sum()),                            # 面积
+                      float(qA_s[ii].sum())])                          # 壁面热流积分
+    q_tot = sum(b[2] for b in bands)
+    if abs(q_tot) < 1e-30:                    # 退化：均分
+        for b in bands:
+            b.append(UA_total / len(bands))
+    else:
+        for b in bands:
+            b.append(UA_total * b[2] / q_tot)  # UA_b：按热流份额分配
+
+    # 干空气基准；T_l 取面积加权平均壁温（凝液离开温度）
+    t_l = float(np.average(Tw, weights=area))
+
+    def h_moist(t_c: float, w: float) -> float:
+        return cp_a * t_c + w * (h_fg0 + cp_v * t_c)
+
+    # ── ① 质量方程（与出口温度无关）：
+    #      ṁ_da(ω_in−ω_o) = Σ_b ρ·h_mb·A_b·ΔY_lm,b
+    #      ΔY_lm,b = 进出口两端推动力的对数平均（活塞流），与 UA 用 ΔT_lm 的口径一致；
+    #      同时保留全混（只取出口端推动力）结果作下界，两者之差即模型形式不确定度。
+    y_in = w_in / (1.0 + w_in)
+    w_lo = max(float(y_sat(Tw.min(), p)) / (1.0 - float(y_sat(Tw.min(), p))), 1e-9)
+
+    def drive_band(t_wb: float, a_b: float, ua_b: float, y_o: float, mode: str) -> float:
+        if ua_b <= 0.0:                       # 该带在加热气体，不参与冷凝
+            return 0.0
+        h_mb = (ua_b / a_b) / (rho * cp * le ** (2.0 / 3.0))
+        y_s = float(y_sat(t_wb, p))
+        d_out = y_o - y_s
+        if mode == "cstr":                    # 全混：只有出口端推动力
+            d = d_out
+        else:                                 # 活塞流：对数平均推动力
+            d_in = y_in - y_s
+            if d_in <= 0 or d_out <= 0:
+                d = max(min(d_in, d_out), 0.0)
+            elif abs(d_in - d_out) < 1e-15:
+                d = d_in
+            else:
+                d = (d_in - d_out) / math.log(d_in / d_out)
+        return rho * h_mb * a_b * max(d, 0.0)
+
+    def mass_resid(w_o: float, mode: str = "plug") -> float:
+        y_o = w_o / (1.0 + w_o)
+        tot = sum(drive_band(b[0], b[1], b[3], y_o, mode) for b in bands)
+        return m_da * (w_in - w_o) - tot
+
+    def solve_mass(mode: str):
+        flo, fhi = mass_resid(w_lo, mode), mass_resid(w_in, mode)
+        if flo * fhi > 0:                     # 无根：不冷凝
+            return w_in, 0.0
+        lo, hi = w_lo, w_in
+        for _ in range(120):
+            mid = 0.5 * (lo + hi)
+            if mass_resid(mid, mode) * flo > 0:
+                lo = mid
+            else:
+                hi = mid
+        w_o = 0.5 * (lo + hi)
+        return w_o, max(m_da * (w_in - w_o), 0.0)
+
+    w_out, m_cond = solve_mass("plug")
+    w_out_cstr, m_cond_cstr = solve_mass("cstr")
+
+    # ── ② 能量方程（同样用对数平均温差，与 UA 的定义一致）：
+    #      ṁ_da[h(T_in,ω_in)−h(T_o,ω_o)] − ṁ_cond·cp_l·T_l = Σ_b UA_b·ΔT_lm,b
+    def energy_resid(t_o: float) -> float:
+        wall = 0.0
+        for t_wb, _a_b, _q_b, ua_b in bands:
+            d1, d2 = t_in - t_wb, t_o - t_wb
+            if d1 <= 0 or d2 <= 1e-9:
+                wall += ua_b * max(min(d1, d2), 0.0)
+            elif abs(d1 - d2) < 1e-12:
+                wall += ua_b * d1
+            else:
+                wall += ua_b * (d1 - d2) / math.log(d1 / d2)
+        gas = m_da * (h_moist(t_in - 273.15, w_in) - h_moist(t_o - 273.15, w_out)) \
+            - m_cond * cp_l * (t_l - 273.15)
+        return gas - wall
+
+    lo, hi = max(float(Tw.min()) - 2.0, 250.0), t_in
+    if energy_resid(lo) * energy_resid(hi) > 0:
+        t_out = float(Tw.min()) + 0.5         # 退化保护
+    else:
+        for _ in range(140):
+            mid = 0.5 * (lo + hi)
+            if energy_resid(mid) * energy_resid(lo) > 0:
+                lo = mid
+            else:
+                hi = mid
+        t_out = 0.5 * (lo + hi)
+
+    y_out = w_out / (1.0 + w_out)
+    # 出口饱和度校核：分区模型不再假设出口饱和，这里看它离饱和有多远
+    y_sat_out = float(y_sat(t_out, p))
+    return {
+        "nband": len(bands),
+        "bands": [{"T_w": b[0], "A_m2": b[1], "Q_wallflux_W": b[2], "UA_W_per_K": b[3],
+                   "h_m_m_s": (b[3] / b[1]) / (rho * cp * le ** (2.0 / 3.0)),
+                   "condensing": bool(b[3] > 0 and b[0] < t_out)} for b in bands],
+        "m_cond_kg_s": m_cond,
+        "m_cond_mg_h": m_cond * 3.6e6,
+        "m_cond_cstr_kg_s": m_cond_cstr,       # 全混口径（下界）
+        "m_cond_cstr_mg_h": m_cond_cstr * 3.6e6,
+        "w_out": w_out,
+        "w_out_cstr_g_per_kg": w_out_cstr * 1000.0,
+        "w_out_g_per_kg": w_out * 1000.0,
+        "Y_out": y_out,
+        "T_out_wet": t_out,
+        "eta_cond": m_cond / (m_da * w_in) if m_da * w_in > 0 else float("nan"),
+        "T_dew_out": t_dew(y_out, p),
+        "Y_sat_at_Tout": y_sat_out,
+        "outlet_supersat": bool(y_out > y_sat_out),
+        "outlet_saturation_ratio": y_out / y_sat_out if y_sat_out > 0 else float("nan"),
+    }
+
+
 # ── 主计算 ─────────────────────────────────────────────────────────────────
 def compute(case: str, time: str, patch: str = "interface",
             y_in: float = Y_H2O_IN, verbose: bool = True) -> dict:
@@ -180,7 +328,8 @@ def compute(case: str, time: str, patch: str = "interface",
 
     Tcell_raw = read_internal(os.path.join(tdir, "T"))
     if isinstance(Tcell_raw, tuple):
-        Tcell = np.full(int(nei.max()) + 1, Tcell_raw[1])
+        # 单元数是 owner 的最大值+1，不是内部面数（neighbour 的最大值+1）
+        Tcell = np.full(int(own.max()) + 1, Tcell_raw[1])
     else:
         Tcell = Tcell_raw
     Tc = Tcell[owner]
@@ -232,8 +381,9 @@ def compute(case: str, time: str, patch: str = "interface",
             lines = [l for l in open(f, encoding="utf-8", errors="replace") if l.strip()]
             Tout_mw = float(lines[-1].split()[-1])
 
-    h_bar = float(np.nansum(h_glb * area) / np.nansum(area[np.isfinite(h_glb)]))
-    hm_bar = h_bar / (rho * cp * LE ** (2.0 / 3.0))  # m/s
+    # h_bar 只是诊断量：它以「体积平均主流温度」为参考，与下面 UA 用的「对数平均温差」
+    # 不是同一套参考温度，两者相差 1.7–1.9 倍，不可混用（2026-10-21 复核 A3）。
+    h_bar_diag = float(np.nansum(h_glb * area) / np.nansum(area[np.isfinite(h_glb)]))
 
     # ── 总热导 UA：由 CFD 的 Q 与对数平均温差反算（结构差异的直接量化量）
     Tw_bar = float(np.average(Tw, weights=area))
@@ -245,8 +395,19 @@ def compute(case: str, time: str, patch: str = "interface",
     Q_flux = m_total * cp * (308.15 - T_out_dry) if Tout_mw is not None else abs(Q)
     UA = Q_flux / dT_lm                       # W/K（用守恒口径，不用近壁梯度积分）
     Q_vol = m_total / rho                     # m³/s
-    hm_A = hm_bar * A                         # m³/s（传质"通风量"）
-    NTU_m = hm_A / Q_vol                      # 传质传递单元数
+
+    # ── 传质系数一律由 UA 派生，保证与湿工况求解用的是同一套 conductance（A3 修复）：
+    #    h_UA = UA/A        [W/m²K]
+    #    h_m  = h_UA/(ρ·cp·Le^{2/3})                      [m/s]
+    #    NTU_m = h_m·A/Q_vol = UA/(cp·ṁ·Le^{2/3})          [−]
+    h_UA = UA / A
+    hm_bar = h_UA / (rho * cp * LE ** (2.0 / 3.0))   # m/s
+    hm_A = hm_bar * A                                # m³/s（传质"通风量"）
+    NTU_m = hm_A / Q_vol                             # 传质传递单元数
+    # 自洽断言：NTU_m 必须等于 UA/(cp·ṁ·Le^{2/3})，否则说明又混用了两套参考温度
+    NTU_m_ref = UA / (cp * m_total * LE ** (2.0 / 3.0))
+    assert abs(NTU_m - NTU_m_ref) < 1e-9 * max(1.0, abs(NTU_m)), \
+        f"NTU_m 与 UA 不自洽：{NTU_m} vs {NTU_m_ref}"
 
     # ── 湿工况耦合求解：UA 由 CFD 给出；出口按平衡（NTU_m>>1）取饱和
     #    能量：UA·ΔT_lm = ṁ_da[h(T_in,ω_in) − h(T_out,ω_out)] − ṁ_cond·cp_l·T_w
@@ -301,6 +462,25 @@ def compute(case: str, time: str, patch: str = "interface",
     m_cond_max = max(m_da * (w_in - y_sat(T_out_dry, P_OP) / (1 - y_sat(T_out_dry, P_OP))), 0.0)
     T_out = T_out_wet
 
+    # ── 分区集总（A4）：按壁面温度分带求解；同时跑 5/10/20 带做分带数敏感性
+    zoned = {}
+    zoned_sens = {}
+    for nb in (5, 10, 20):
+        z = zoned_condensation(Tw, area, q, UA, m_da, w_in, rho, cp, nband=nb)
+        zoned_sens[str(nb)] = z["m_cond_mg_h"]
+        if nb == 10:
+            zoned = z
+
+    # ── 正交校核（A1）：固体侧冷板热流，用于判断 wallHeatFlux 与焓平衡谁更可信
+    Q_solid = None
+    qs = os.path.join(case, "postProcessing", "solid", "Q_solid")
+    if os.path.isdir(qs):
+        latest = sorted(os.listdir(qs), key=lambda s: int(s) if s.isdigit() else 0)[-1]
+        f = os.path.join(qs, latest, "wallHeatFlux.dat")
+        if os.path.isfile(f):
+            lines = [l for l in open(f, encoding="utf-8", errors="replace") if l.strip()]
+            Q_solid = float(lines[-1].split()[-1])
+
     # ── 能量平衡（Step1 口径）：Q vs ṁ·cp·ΔT
     ratio = None
     if Tout_mw is not None:
@@ -330,9 +510,13 @@ def compute(case: str, time: str, patch: str = "interface",
         "Q_flux_W": Q_flux,             # ṁ·cp·ΔT 焓平衡（守恒，对比主口径）
         "h_local": stats(h_loc, area),
         "h_global": stats(h_glb, area),
-        "h_bar": h_bar, "h_m": hm_bar,
+        "h_bar_diag": h_bar_diag,      # 诊断用：体积平均参考温度口径，勿与 UA 混用
+        "h_m": hm_bar,                 # 由 UA 派生的传质系数 [m/s]
         "h_UA": UA / A if A > 0 else float("nan"),   # 可横比的整体换热系数 = UA/A
         "h_valid_area_m2": float(np.nansum(area[np.isfinite(h_glb)])),
+        "Q_solid_W": Q_solid,          # 固体侧冷板热流（wallHeatFlux 与焓平衡的正交校核）
+        "zoned": zoned,                # 分区集总结果（10 带），壁温分布宽时以此为准
+        "zoned_sens_mg_h": zoned_sens,  # 分带数敏感性：{"5":…, "10":…, "20":…}
         "T_wall_bar": Tw_bar,
         "UA_W_per_K": UA,
         "NTU_m": NTU_m, "hm_A_m3_s": hm_A, "Q_vol_m3_s": Q_vol,
