@@ -1,0 +1,198 @@
+
+=== 清理候选三项核对 ===  根目录: F:\B_Simulation\fangzhen-3\OpenFOAM
+候选 144 项 | 可删 133 项 (5977 MB) | 保留 11 项 (72 MB)
+
+路径                                                         MB  ①引用   ②性质   ③后果   
+---------------------------------------------------------------------------------
+_trash_2026-10-20                                     4614.93  PASS  PASS  PASS    ← 可删
+case_v81_1tau\0.046                                     31.21  PASS  PASS  WARN  
+case_qishi\4e-06                                        30.65  PASS  PASS  WARN  
+caseCHT_qishi\10050                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10100                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10150                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10200                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10250                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10300                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10350                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10400                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10450                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10500                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10550                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10600                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10650                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10700                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10750                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10800                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10850                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10900                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\10950                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11050                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11100                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11150                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11200                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11250                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11300                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11350                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11400                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11450                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11500                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11550                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11600                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11650                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11700                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11750                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11800                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11850                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11900                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\11950                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12050                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12100                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12150                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12200                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12250                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12300                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12350                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12400                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12450                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12500                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12550                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12600                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12650                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12700                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12750                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12800                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12850                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12900                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\12950                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13050                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13100                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13150                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13200                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13250                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13300                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13350                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13400                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13450                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13500                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13550                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13600                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13650                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13700                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13750                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13800                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13850                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13900                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\13950                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14050                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14100                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14150                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14200                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14250                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14300                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14350                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14400                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14450                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14500                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14550                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14600                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14650                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14700                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14750                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14800                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14850                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14900                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\14950                                     11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9050                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9100                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9150                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9200                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9250                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9300                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9350                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9400                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9450                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9500                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9550                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9600                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9650                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9700                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9750                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9800                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9850                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9900                                      11.75  PASS  PASS  PASS    ← 可删
+caseCHT_qishi\9950                                      11.75  PASS  PASS  PASS    ← 可删
+log.1tau_v81_run3.txt                                    9.42  PASS  PASS  PASS    ← 可删
+log.1tau_v81_run2.txt                                    8.65  PASS  PASS  WARN  
+log.cont_15000.txt                                       7.23  PASS  PASS  PASS    ← 可删
+log.gate_01.txt                                          3.58  PASS  PASS  PASS    ← 可删
+log.diag_step2d.txt                                      1.32  PASS  PASS  WARN  
+log.fixsliver                                            1.15  PASS  PASS  PASS    ← 可删
+case_qishi\0\p_rgh.bak                                   0.79  PASS  PASS  PASS    ← 可删
+log.cht_v88.txt                                          0.72  PASS  PASS  PASS    ← 可删
+log.diag_step2c.txt                                      0.36  PASS  PASS  WARN  
+log.bench_mpi.txt                                        0.04  PASS  PASS  PASS    ← 可删
+log.diag_step2b.txt                                      0.02  PASS  PASS  WARN  
+log.diag_v88_step2.txt                                   0.02  PASS  PASS  PASS    ← 可删
+tools\__pycache__                                        0.02  PASS  PASS  PASS    ← 可删
+log.decomp_v88.txt                                       0.01  PASS  PASS  PASS    ← 可删
+log.diag_step2.txt                                       0.01  PASS  PASS  WARN  
+log.ss_test.txt                                          0.01  PASS  PASS  PASS    ← 可删
+log.ss_test2.txt                                         0.01  PASS  PASS  PASS    ← 可删
+_cmd_1tau_v81.txt                                        0.00  PASS  PASS  PASS    ← 可删
+_cmd_cht_v88.txt                                         0.00  PASS  PASS  PASS    ← 可删
+_nohup_cht_v88.out                                       0.00  PASS  PASS  PASS    ← 可删
+log.audit_checkmesh_v81.txt                              0.00  PASS  PASS  WARN  
+log.audit_checkmesh_v88.txt                              0.00  PASS  PASS  WARN  
+log.audit_checkmesh_v88_solid.txt                        0.00  PASS  PASS  WARN  
+log.audit_convert_v88                                    0.00  PASS  PASS  WARN  
+log.decomp2_v81.txt                                      0.00  PASS  PASS  PASS    ← 可删
+log.decomp_v81.txt                                       0.00  PASS  PASS  PASS    ← 可删
+log.ss_decomp.txt                                        0.00  PASS  PASS  PASS    ← 可删
+
+--- 未通过项（保留，附依据）---
+  case_qishi\4e-06
+      ①PASS:时间目录：不做 token 匹配（数字字面量会造成假阳性）
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  case_v81_1tau\0.046
+      ①PASS:时间目录：不做 token 匹配（数字字面量会造成假阳性）
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  log.1tau_v81_run2.txt
+      ①PASS:仅报告提及：待办与清理审计_2026-10-20_2306.html
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  log.audit_checkmesh_v81.txt
+      ①PASS:仅报告提及：审计报告_v8_8能力评估_2026-10-20.html
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  log.audit_checkmesh_v88.txt
+      ①PASS:仅报告提及：审计报告_v8_8能力评估_2026-10-20.html
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  log.audit_checkmesh_v88_solid.txt
+      ①PASS:仅报告提及：审计报告_v8_8能力评估_2026-10-20.html
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  log.audit_convert_v88
+      ①PASS:仅报告提及：审计报告_v8_8能力评估_2026-10-20.html
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  log.diag_step2.txt
+      ①PASS:仅报告提及：Step2阻塞根因与修复_2026-10-20.html
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  log.diag_step2b.txt
+      ①PASS:仅报告提及：Step2阻塞根因与修复_2026-10-20.html
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  log.diag_step2c.txt
+      ①PASS:仅报告提及：Step2阻塞根因与修复_2026-10-20.html
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+  log.diag_step2d.txt
+      ①PASS:仅报告提及：Step2阻塞根因与修复_2026-10-20.html
+      ②PASS:产物/缓存/备份，非配置非核心逻辑
+      ③WARN:命中证据链守护名单，删除会让旧报告索引悬空
+
+机读结果 -> _cleanup_audit.json

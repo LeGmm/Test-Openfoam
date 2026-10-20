@@ -68,3 +68,7 @@ tests/**/postProcessing/
 QiShi_*/
 Qishi_*/
 routeA_runs/
+
+# ---------- 8. 审计/指标脚本的一次性输出（可重生成）----------
+_*.json
+_*.tmp

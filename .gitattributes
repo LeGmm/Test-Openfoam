@@ -1,0 +1,6 @@
+# 统一换行，避免 Windows/blueCFD 产生的 CRLF 污染 diff
+* text=auto eol=native
+
+# OpenFOAM 场文件体量大且纯文本，交由 git 自动判定；声明为 text 以便压缩与 diff
+*.h5   binary
+*.msh  binary
