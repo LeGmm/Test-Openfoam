@@ -3,12 +3,17 @@
 把 `routeA_condensation_setup.py`（Fluent 路线 A：Mixture 多相 + 组分输运 + Lee 相变）移植到
 **OpenFOAM（multiphaseEulerFoam + 界面组分相变）**，用于多结构「冷凝效率」对比实验。
 
-> 当前主线是**稳态结构对比**（见 §3.7）：v8_1 `caseCHT_qishi/`（15000 外迭代）+ v8_8 `caseCHT_v88/`
-> （9000 外迭代，2026-10-21 跑完），用 `tools/condensation_metrics.py` 出四项对比指标。
-> 结果：v8_8 冷凝量 1.308 mg/h vs v8_1 1.233 mg/h（+6.0%）——见《报告_三任务交付_2026-10-21.html》。
+> 当前主线是**稳态结构对比**（见 §3.7）：v8_1 `caseCHT_qishi/`（15000 外迭代）与 v8_8 `caseCHT_v88/`
+> （15000 外迭代，2026-10-21 续算至收敛），用 `tools/condensation_metrics.py` 出四项对比指标。
+> 修正后结论（**分区集总 + 活塞流口径**）：v8_1 冷凝量 1.645 mg/h、v8_8 1.626 mg/h（−1.2%）——
+> **两者在现有精度下不可区分**（模型形式不确定度 ±11% 已大于结构差异 1.2%）；UA 差 +23.1% 是稳健结论。
+> 详见《报告_修复与v8_9体检_2026-10-21.html》；《报告_三任务交付_2026-10-21.html》§3 的冷凝量/UA/NTU_m
+> /出口含湿量数字**已作废**（旧报告保留了作废横幅，供追溯）。
 > 已废弃的 Step2 瞬态路线（`case_v81_1tau/`）保留作 P0-1 诊断用，但**不再是出数的前提**。
 > 旧的 `case/`、`caseCHT/` 已于 2026-10-20 归档移出，回收站本体已于 2026-10-21 删除。
-> 版本控制：2026-10-21 起本目录是 git 仓库（`.gitignore` 排除网格/结果/日志/缓存，仅入库配置与脚本）。
+> 版本控制：2026-10-21 起本目录是 git 仓库，远端
+> `https://github.com/LeGmm/Test-Openfoam`（PRIVATE，分支 `master`，tag `baseline-2026-10-21`；
+> `.gitignore` 排除网格/结果/日志/缓存，仅入库配置与脚本）。
 
 ---
 
@@ -17,34 +22,46 @@
 ```
 OpenFOAM/
 ├── README.md                  # 本文件
-├── 安装指南.md                 # WSL2 + OpenFOAM 安装步骤
+├── 安装指南.md                 # ⚠ 方案 A 写的是 WSL2 + OpenFOAM.org v11，本机实际用 blueCFD-Core 8
+├── .gitignore / .gitattributes
 ├── tools/
 │   ├── fluent_cas_to_foam.py  # Fluent .cas.h5 → 单流体区 polyMesh（Step2 用，已实测验证）
 │   ├── fluent_cas_to_foam_cht.py # Fluent .cas.h5 → fluid+solid 双区域 polyMesh（Step1 用）
+│   ├── inspect_cas_h5.py      # Fluent .cas.h5 体检器：完整性/规模/区域名/负体积/非法单元
 │   ├── setup_cht_coupling.py  # 两侧界面统一改名 interface + T 写 coupledBaffleMixed（Step1 必做）
 │   ├── align_step2_thermo.py  # Step2 热物性对齐（液相 multiComponent+Henry、气相 eConst）※生成算例后必跑
+│   ├── warmstart_step2.py     # Step2 初场/warmstart（拷 p_rgh +101325 等绝压口径处理）
 │   ├── ofmesh.py              # polyMesh 读写公共模块（新脚本统一从这里 import）
-│   ├── preflight.py           # 开跑前门禁：语法/依赖/网格/拓扑/补丁名/controlDict/耦合/热物性
+│   ├── preflight.py           # 开跑前门禁：语法/依赖/网格/拓扑/补丁名/controlDict/耦合/热物性/压力
 │   ├── map_interface_T.py     # Step1→Step2 界面温度映射（extract/extract-vtk/map/verify）
+│   ├── condensation_metrics.py # ★ 稳态结构对比的四项指标（含分区集总冷凝模型，见 §3.7）
 │   ├── mesh_topology_report.py # 判"一对单元多张面"是【真重复】还是【铰链】；--fix 只删真重复
+│   ├── audit_cleanup.py       # 清理候选三项核对器（只读，绝不自删）
+│   ├── _do_cleanup.py         # 按 audit_cleanup 的机读结果执行删除（一次性）
 │   ├── merge_dup_cells.py     # ⚠️ 已弃用：迭代并单元在 polyhedral 网格上会级联毁网格（64729→28378）
 │   ├── fix_pinched_cells.py   # ⚠️ 已弃用：单对并细胞会让缺陷扩散（1 对 → 7 对 → …）
 │   ├── drop_duplicate_faces.py # ⚠️ 已弃用：删面会让铰链单元开口（open cells 2）
 │   ├── plot_z0_slice.py       # 读 surfaces FO 的切片 VTK，画 z=0 温度/流场（scipy griddata）
 │   ├── fix_zero_volume_cells.py  # 零体积单元节点注入工具
 │   ├── check_face_orientation.py # 网格朝向/排序自检（纯 Python，秒级）
-│   ├── of8.py                  # 在本机 blueCFD(OpenFOAM 8) 环境里执行任意 OF 命令
-│   ├── generate_case.py       # 参数化生成全套 0/ constant/ system/ 字典（含六项指标 FO）
-│   ├── prepare_all_structures.py # 批量转换 8 个结构 + 生成字典
-│   ├── ablate.py             # 单因素对照探针（求解发散/崩溃归因）
-│   ├── mesh_stats.py / compare.py # 网格面积统计 / 跨结构指标对比
+│   ├── of8.py / run_of_cmd.py # 在本机 blueCFD(OpenFOAM 8) 环境执行 OF 命令（后者实时写日志，适合长跑）
+│   ├── generate_case.py       # 参数化生成全套 0/ constant/ system/ 字典
+│   ├── prepare_all_structures.py # 批量转换 8 个结构（⚠ 依赖不存在的 cases/，当前停用）
+│   ├── ablate.py              # 单因素对照探针（求解发散/崩溃归因）
+│   ├── mesh_stats.py / compare.py # ⚠ 均硬编码依赖 cases/（不存在），当前停用
+│   ├── fetch_installer.py / _diag_field_probe.py # 安装器抓取 / 场极值单元定位（排错用）
 │   └── diagnostics/           # 排错期诊断脚本归档（audit_sources/dup_faces/liq_probe 等，见其 README）
-├── caseCHT_qishi/             # Step1：v8_1 共轭传热（0…9000，能量比 1.080，待续算）
-├── case_v81_1tau/             # Step2：v8_1 冷凝 1τ（T_int 已映射，当前诊断运行）
-├── caseCHT_v88/               # Step1：v8_8 共轭（就绪，未跑）
-├── case_v88/                  # Step2：v8_8（字典待重生成 + 映射后再跑）
+├── caseCHT_qishi/             # Step1：v8_1 共轭传热（已跑到 15000 外迭代，收敛）
+├── caseCHT_v88/               # Step1：v8_8 共轭传热（已跑到 15000 外迭代，收敛）
+├── case_v81_1tau/             # Step2：v8_1 冷凝 1τ（T_int 已映射；崩溃诊断场 0.046 留存）
+├── case_v88/                  # Step2：v8_8（字典仍是启动测试版，未映射、未跑）
+├── case_qishi/                # 旧单区域算例（保留 0/ 与 4e-06 爆温证据）
 └── tests/                     # 管线验证留存（bcDissolving_map = 映射端到端验证算例）
 ```
+
+根目录还有若干报告与记录文件：`报告_修复与v8_9体检_2026-10-21.html`（★最新结论）、
+`报告_三任务交付_2026-10-21.html`（§3 已作废）、`待办清单_2026-10-21.md`、`清理记录_2026-10-21.md`、
+`代码审计报告_2026-10-20.html`、`网格修复指南.md`。
 
 ---
 
@@ -83,8 +100,10 @@ C:/Users/LELE/.workbuddy/binaries/python/envs/default/Scripts/python.exe \
 输出 `case_qishi/constant/polyMesh/`，并把边界区命名固定为 `inlet / outlet / coldWall / wall`。
 不同结构的 `.cas.h5` 都能用同一个脚本（自动识别流体/固体 cell zone 与固流耦合界面）。
 
-> ⚠️ **8 结构批量链路尚未重建**：`cases/` 目录与 `prepare_all_structures.py` 的批量流程已停用，
-> 现在按单结构手工走两步共轭 SOP（见 §6）。批量化是待办 P1-3（先写 `generate_case_cht.py`）。
+> ⚠️ **8 结构批量链路尚未重建**：`cases/` 目录与 `prepare_all_structures.py` / `compare.py` /
+> `mesh_stats.py` / `run_all.sh` 的批量流程已停用（前三者硬编码依赖不存在的 `cases/`），
+> 现在按单结构手工走两步共轭 SOP（见 §6）。批量化对应待办 T6（先写 `generate_case_cht.py`）。
+> 另：转换完立刻跑 `checkMesh` 时若缺 `system/controlDict` 会 FATAL——先确保字典齐备再体检。
 
 ### 3. 校核网格
 
@@ -168,16 +187,17 @@ $PY tools/map_interface_T.py map _interface_T.csv case_v81_1tau/constant/polyMes
 $PY tools/map_interface_T.py map _interface_T.csv case_v81_1tau/constant/polyMesh coldWall case_v81_1tau/0/T.liquid
 $PY tools/of8.py case_v81_1tau "multiphaseEulerFoam > log 2>&1"
 
-# Step 3  六项指标对比（mdot_cond/Y_H2O_out/T_out/Q_wall/dp 自动汇总）
-$PY tools/compare.py
+# Step 3  指标提取（稳态结构对比用 §3.7 的 condensation_metrics.py；
+#         ⚠ tools/compare.py 依赖不存在的 cases/，已停用，不要跑）
+$PY tools/condensation_metrics.py caseCHT_qishi 15000 --json _m_v81.json
 ```
 
-管线状态（2026-10-20 23:30）：压力口径已修正（`p_rgh` 绝压，preflight 第 11 项把关）；
-v8_1 的 T_int 已用 9000 步重映射（9459 面、均值 278.279 K、verify PASS）。
-当前 P0 = **液相温度发散**：1τ 在 t=0.0467 s 报 `Negative initial temperature T0`（液相先到 218–443 K）；
-Step1 能量比 1.080（阈值 <1.05），需续算后再取最终 T_int。
+管线状态（2026-10-21 更新）：压力口径已修正（`p_rgh` 绝压，preflight 第 11 项把关）；
+v8_1、v8_8 的 Step1 均已跑到 **15000 外迭代并收敛**（出口漂移 v8_1 ≈1.5e-6 K/步）。
+Step2 瞬态（1τ）已**降级为可选验证项**：唯一残留阻塞是液相温度发散
+（t=0.0467 s 报 `Negative initial temperature T0`，液相先到 218–443 K），
+当前主线不依赖它出数——结构对比走 §3.7 的稳态路线。
 旧结论"网格源头修复 / 薄片单元"已由 v8_8 审计与压力修复推翻，不要再按它排产。
-先跑满 1τ（约 27 h / 8 进程），观察 `alpha.liquid > 0`、沿 -Y 下沉与出口液相。
 
 ---
 
@@ -192,7 +212,7 @@ PY=C:/Users/LELE/.workbuddy/binaries/python/envs/default/Scripts/python.exe
 
 # ① 双区域转换（两结构各一次，已有产物可跳过）
 $PY tools/fluent_cas_to_foam_cht.py "<结构>.cas.h5" caseCHT_<结构>
-# ② 分区 + 稳态共轭 + 重构（8 进程；v8_8 实测 9000 外迭代 ≈ 4478 s）
+# ② 分区 + 稳态共轭 + 重构（8 进程；v8_8 实测 15000 外迭代 ≈ 5300 s，0.58 s/外迭代）
 $PY tools/run_of_cmd.py caseCHT_X "decomposePar -allRegions -force"  log.decomp.txt
 $PY tools/run_of_cmd.py caseCHT_X "@_cmd_cht_v88.txt"                log.cht.txt
 $PY tools/run_of_cmd.py caseCHT_X "reconstructPar -allRegions"       log.recon.txt
@@ -212,8 +232,8 @@ $PY tools/condensation_metrics.py caseCHT_X <最后外迭代数> --json _m_X.jso
   单一平均壁温对壁温分布宽的结构会失效：v8_8 壁温中位 283.6 K 高于干工况出口 280.4 K，
   取中位算 ΔT_lm 得到负温差、数学上无定义。
 - **不再使用「出口取平衡饱和」**：分区模型实测出口仅 38% 饱和，该假设不成立。
-  `m_cond_cstr_*`（全混口径，下界）与活塞流之差即模型形式不确定度（v8_1 上约 ±11%，
-  已大于 v8_1/v8_8 之间 6% 的结构差异——这是当前对比的主要限制）。
+  `m_cond_cstr_*`（全混口径，下界）与活塞流之差即模型形式不确定度（两结构上约 ±11%，
+  已大于 v8_1/v8_8 之间 1.2% 的结构差异——这是当前对比的主要限制）。
 - 假设与适用条件见 `tools/condensation_metrics.py` 文件头与
   《报告_三任务交付_2026-10-21.html》§3.6–3.7。
 - 换结构进管线前先体检源文件：`python tools/inspect_cas_h5.py "<结构>.cas.h5"`
@@ -233,6 +253,7 @@ $PY tools/condensation_metrics.py caseCHT_X <最后外迭代数> --json _m_X.jso
 | `Y_H2O` | 0.0289 | 入口水蒸气质量分数（80%RH） |
 | `P_OP` | 101325 Pa | 操作压力 |
 | `G` | (0, -9.81, 0) | 重力/排水方向 |
+| `A_IN` | 1.1298e-4 m² | 入口面积（**硬编码，无校验**；换结构必须核对，见待办 T12） |
 
 > 扫描 T_c 对比结构：只改 `T_C` 重跑 `generate_case.py`，再用不同 `OUT_DIR` 并行。
 
@@ -255,6 +276,12 @@ postProcess -func "patchHeatFlux(name=coldWall)"   # 或 wallHeatFlux
 # ④ 压降 Δp = p@inlet − p@outlet
 postProcess -func "patchAverage(name=inlet,p)" -func "patchAverage(name=outlet,p)"
 ```
+
+> ⚠️ **实测坑（2026-10-21）**：上面 ① 的出口液相流率 `mdot_cond` **不可用**——凝液贴壁、
+> 当前模型没有排液/液膜，`alphaPhi.liquid` 在 `coldWall` 是 `zeroGradient + noSlip`，
+> 读出来恒为 0 并不代表没冷凝。出口含湿量请用 §3.7 的 `condensation_metrics.py`（气相收支法）。
+> 另外 `wallHeatFlux` FO 在层流多相（Step2）会 FATAL，Q_wall 拿不到，只能用气相焓平衡间接核对；
+> ④ 里 Step1 的压降用 `p`、Step2 要用 `p_rgh`（两者口径不同）。
 
 **守恒校核（必做，同 SOP §8）**：
 - 质量：入口 H₂O 流量 ≈ 出口气相 H₂O 流量 + ṁ_cond（误差 < 2%）
@@ -289,10 +316,25 @@ postProcess -func "patchAverage(name=inlet,p)" -func "patchAverage(name=outlet,p
   捏点已定性为铰链拓扑（合法）；"薄片单元"已被 v8_8 审计用 `q=V/A^1.5` 与 `checkMesh` 反驳
   （两套网格都没有薄片，只有 67–96 µm 的等轴小胞）。真正的启动阻塞是压力口径（已修），
   当前的 1τ 阻塞是液相温度发散（P0）。
-- 当前真正的进展项：Step1 已到 9000 步（能量比 1.080），T_int 已映射；
+- 当前真正的进展项：Step1 v8_1/v8_8 均已到 15000 步（能量比 1.078/1.102，口径为热流积分/焓平衡）；
   Step2 待解决"液相能量方程在 α_l→1e-6 时的病态"（候选：T 限幅 / 液相 hConst / 共享温度场）。
 - 备选扩展（不阻塞主线）：
   - 单向耦合的潜热反馈补偿：用 Step2 的 Q_wall 反代 Step1 冷壁热流迭代一次；
   - `tools/diagnostics/audit_sources.py` 升级为正式工具并接入 prepare_all_structures 前置检查；
   - 网格无关性（GCI）：冷壁与相变区加密，两套网格结果差 <1%。
   - 收敛判据统一：残差 + 指标量（ṁ_cond、出口 H₂O 分数）在 N 步内变化 < 阈值。
+
+## 八、版本控制与工具环境
+
+- 仓库根 = 本目录，远端 `https://github.com/LeGmm/Test-Openfoam`（PRIVATE），分支 `master`，
+  tag `baseline-2026-10-21`（清理前基线）。提交信息三段式：改动内容 / 影响范围 / 验证方式。
+- 推送前先 `gh auth setup-git`（把 gh 的凭据接给 git）；已验证 `git push -u origin master` 可用。
+- Python：脚本统一用 `C:/Users/LELE/.workbuddy/binaries/python/envs/default/Scripts/python.exe`
+  （该 venv 已装 numpy 2.5.2 + h5py 3.16.0）。用不带 h5py 的解释器跑 `preflight.py`
+  只会让 `deps` 一项 FAIL，不影响求解。
+- 清理走 `tools/audit_cleanup.py`（只读三项核对）→ `tools/_do_cleanup.py`（执行），删除前先打 tag。
+  已删 5.98 GB，工程 7.4→2.0 GB。
+- 入库内容自检：`git ls-files` 共 272 个文件 / 20 MB，polyMesh、`processor*/`、
+  `postProcessing*/`、`*.h5`、`log.*`、`__pycache__`、时间目录追踪数均为 0。
+
+---
