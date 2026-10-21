@@ -259,29 +259,42 @@ $PY tools/condensation_metrics.py caseCHT_X <最后外迭代数> --json _m_X.jso
 
 ---
 
-## 五、考核指标后处理（对应 Fluent Report Definition）
+## 五、考核指标后处理（OF8 可用命令，2026-10-21 实测校订）
 
-在算例目录里用 `postProcess`（或加入 `controlDict` 的 `functions`）：
+`postProcess -func X` 是按名字在 `$FOAM_ETC/caseDicts/postProcessing/` 找模板文件。
+blueCFD OF8 自带的模板实测只有：`surfaceFieldValue/{patch,patchAverage,patchIntegrate}`、
+`flowRate/flowRatePatch`、`fields/wallHeatFlux`、`pressure/pressureDifferencePatch`、
+`minMax/*`、`numerical/residuals`、`visualization/surfaces` 等。
+**旧版 README 里的 `phasePatchFlowRate`、`patchExpression`、`patchHeatFlux`、`surfaceFieldValue`
+四个名字在本机 OF8 中均不存在**（实测报 `Cannot find functionObject file`），
+它们是 OpenFOAM.com / 更新版本的接口。可用写法如下：
 
 ```bash
-# ① 出口凝液质量流率 ṁ_cond（液相经 outlet 排出）
-postProcess -func "phasePatchFlowRate(name=outlet, phase=liquid)"
+# ① 出口质量流率（flowRatePatch 只给混合物通量）
+postProcess -latestTime -func "flowRatePatch(name=outlet)"
 
-# ② 出口水蒸气质量分数（H2O.gas 的质量加权平均）
-postProcess -func "patchExpression(name=outlet, expression='alpha.gas*thermo:rho.gas*H2O.gas/alpha.gas*thermo:rho.gas', accumulations='weightedAverage')"
+# ② 出口 H2O.gas 质量分数（面积平均；质量加权见 controlDict 的 weightedAverage FO）
+postProcess -latestTime -func "patchAverage(name=outlet, H2O.gas)"
 
-# ③ 冷壁换热量 Q_wall（对 coldWall 面做热流积分）
-postProcess -func "patchHeatFlux(name=coldWall)"   # 或 wallHeatFlux
+# ③ 冷壁热流：wallHeatFlux 只在【有 compressible momentumTransport 的区】可用
+postProcess -latestTime -func wallHeatFlux        # Step1 fluid 区可用；Step2 多相会 FATAL
 
-# ④ 压降 Δp = p@inlet − p@outlet
-postProcess -func "patchAverage(name=inlet,p)" -func "patchAverage(name=outlet,p)"
+# ④ 压差（patchAverage 逐个取，或 pressureDifferencePatch 一次算）
+postProcess -latestTime -func "patchAverage(name=inlet,p)"
+postProcess -latestTime -func "patchAverage(name=outlet,p)"
 ```
 
-> ⚠️ **实测坑（2026-10-21）**：上面 ① 的出口液相流率 `mdot_cond` **不可用**——凝液贴壁、
-> 当前模型没有排液/液膜，`alphaPhi.liquid` 在 `coldWall` 是 `zeroGradient + noSlip`，
-> 读出来恒为 0 并不代表没冷凝。出口含湿量请用 §3.7 的 `condensation_metrics.py`（气相收支法）。
-> 另外 `wallHeatFlux` FO 在层流多相（Step2）会 FATAL，Q_wall 拿不到，只能用气相焓平衡间接核对；
-> ④ 里 Step1 的压降用 `p`、Step2 要用 `p_rgh`（两者口径不同）。
+> ⚠️ **实测根因（2026-10-21）**：`wallHeatFlux` 在 Step2 会报
+> `Unable to find compressible turbulence model in the database`（wallHeatFlux.C:226）——
+> 它要查 compressible momentumTransport，Step1（单相可压缩）有、Step2（multiphaseEulerFoam）没有。
+> 所以 **Q_wall 只能从 Step1 拿，Step2 的能量闭合只能用气相焓平衡间接核对**。
+>
+> ⚠️ **逐相质量流率没有现成 FO**：凝液贴壁、当前模型无排液/液膜，`alphaRhoPhi.liquid`
+> 在 `coldWall` 是 `zeroGradient + noSlip`，即使取到也是 0，**读出 0 不代表没冷凝**。
+> 出口含湿量请用 §3.7 的 `condensation_metrics.py`（气相收支法）。
+> 逐相流率的可行写法是像 `caseCHT_*/system/controlDict` 那样用
+> `surfaceFieldValue` + `alphaRhoPhi.liquid`（solver 内置类，不受上面模板目录限制）。
+> 另：④ 里 Step1 的压降用 `p`，Step2 用 `p_rgh`，两者口径不同。
 
 **守恒校核（必做，同 SOP §8）**：
 - 质量：入口 H₂O 流量 ≈ 出口气相 H₂O 流量 + ṁ_cond（误差 < 2%）

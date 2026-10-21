@@ -40,6 +40,8 @@ import warnings
 TOOLS = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, TOOLS)
 
+from ofmesh import face_area_centre, read_mesh          # noqa: E402
+
 PASS, WARN, FAIL, SKIP = "PASS", "WARN", "FAIL", "SKIP"
 _res: list[tuple[str, str, str]] = []
 
@@ -379,6 +381,85 @@ def check_p_ref(case: str, regions: list[str]) -> None:
     add(PASS, "pressure", msg + "，绝压口径正确")
 
 
+# ------------------------------------------------------------- 12 入口面积与冷壁映射
+def check_input_consistency(case: str, regions: list[str]) -> None:
+    """A_IN 硬编码校验 + 冷壁映射告警（2026-10-20 审计缺陷 #4，2026-10-21 落地）。
+
+    ① A_IN：generate_case.py 顶部的入口面积是手抄常量，换结构后若网格的入口面积
+       变了而 A_IN 没改，质量流量 ṁ=ρ·U·A_IN 就会整体偏移，且**不报任何错**。
+       这里直接从 polyMesh 算入口面积，与 A_IN 比，偏差 >1% 即 FAIL。
+    ② 冷壁映射：Step2 的 coldWall 必须是 Step1 映射来的 nonuniform 值；若仍是
+       uniform 278.15，等价于"把界面全部压到 5℃"（静默过度冷却），冷凝量会虚高。
+       多区域算例（Step1）的界面是耦合 BC，不走映射，跳过。
+    """
+    fluid = "fluid" if "fluid" in regions else ("" if "" in regions else None)
+    if fluid is None:
+        add(SKIP, "input", "找不到 fluid 区，跳过")
+        return
+    pm = mesh_dir(case, fluid)
+    try:
+        pts, faces, own, nei, patches = read_mesh(pm)
+    except Exception as e:                                   # 网格读不动时交给 polymesh 项报错
+        add(SKIP, "input", f"polyMesh 读不动（{type(e).__name__}），跳过")
+        return
+
+    # ① 入口面积 vs A_IN
+    gen = os.path.join(os.path.dirname(os.path.abspath(__file__)), "generate_case.py")
+    m = re.search(r"^A_IN\s*=\s*([-\d.eE+]+)", _read(gen), re.M) if os.path.isfile(gen) else None
+    if not m:
+        add(WARN, "input", "tools/generate_case.py 里找不到 A_IN，无法校验入口面积")
+    elif "inlet" not in patches:
+        add(WARN, "input", "polyMesh 里没有名为 inlet 的补丁，无法校验入口面积")
+    else:
+        b = patches["inlet"]
+        idx = range(b["startFace"], b["startFace"] + b["nFaces"])
+        a_mesh = sum(face_area_centre(pts, faces[i])[0] for i in idx)
+        a_in = float(m.group(1))
+        dev = (a_mesh - a_in) / a_in * 100.0
+        msg = (f"网格入口面积 {a_mesh:.4e} m² vs generate_case.A_IN {a_in:.4e} m²，"
+               f"偏差 {dev:+.2f}%")
+        if abs(dev) > 1.0:
+            add(FAIL, "input", msg + "\n"
+                "      → A_IN 是 generate_case.py 顶部手抄常量，与网格不符会让质量流量\n"
+                "        整体偏移且不报错。改 A_IN 或重跑 generate_case.py 后再开跑。")
+        else:
+            add(PASS, "input", msg)
+
+    # ② Step2 冷壁是否已映射（仅单区域 Step2 算例有意义）
+    if regions != [""]:
+        add(SKIP, "coldwall-map", "多区域算例（Step1）界面为耦合 BC，不走映射，跳过")
+        return
+    tf = os.path.join(case, "0", "T.gas")
+    if not os.path.isfile(tf):
+        add(SKIP, "coldwall-map", "无 0/T.gas，跳过")
+        return
+    blk = ""
+    txt = _read(tf)
+    i = txt.find("boundaryField")
+    if i >= 0:
+        # 缩进兼容：generate_case 生成的是 4 空格，map_interface_T/手改可能是 8 空格
+        mm = re.search(r"^[ \t]+coldWall[ \t]*\r?\n[ \t]*\{", txt[i:], re.M)
+        if mm:
+            j = mm.end(); d = 1; k = j
+            while d and k < len(txt[i:]):
+                if txt[i:][k] == "{": d += 1
+                elif txt[i:][k] == "}": d -= 1
+                k += 1
+            blk = txt[i:][j:k]
+    if not blk:
+        add(SKIP, "coldwall-map", "0/T.gas 里没有 coldWall 补丁，跳过")
+        return
+    if re.search(r"value\s+nonuniform\s+List<scalar>", blk):
+        add(PASS, "coldwall-map", "0/T.gas coldWall 为 nonuniform（已映射）")
+    elif re.search(r"value\s+uniform\s+278\.15", blk):
+        add(WARN, "coldwall-map",
+            "0/T.gas coldWall 仍是 uniform 278.15\n"
+            "      → 这等于把整个界面人为压到 5℃（静默过度冷却），冷凝量会虚高。\n"
+            "      → 若是故意做对照请忽略；否则先跑\n"
+            f"          python tools/map_interface_T.py map _interface_T.csv {case}/constant/polyMesh coldWall {case}/0/T.gas")
+    else:
+        add(WARN, "coldwall-map", "0/T.gas coldWall 既非 nonuniform 也非 uniform 278.15，请人工确认")
+
 # ------------------------------------------------------------- 10 Step2 热物性
 def check_step2_thermo(case: str, regions: list[str]) -> None:
     if regions != [""]:
@@ -449,6 +530,7 @@ def main() -> int:
         check_cht_interface(case, regions)
         check_step2_thermo(case, regions)
         check_p_ref(case, regions)
+        check_input_consistency(case, regions)
         if a.checkmesh:
             check_checkmesh(case, regions)
 
