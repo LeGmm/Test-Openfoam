@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>缺陷修复 + v8_9 体检 + 可靠性判定 · 2026-10-21</title>
+<style>
+:root{--bg:#0e1116;--panel:#161b22;--panel2:#1c232c;--line:#2a323d;
+--tx:#e6edf3;--tx2:#9aa7b4;--tx3:#6e7b8a;
+--ok:#3fb950;--warn:#d29922;--bad:#f85149;--info:#58a6ff;--acc:#bc8cff;}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);
+font:15px/1.75 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;}
+.wrap{max-width:1180px;margin:0 auto;padding:46px 26px 80px;}
+header{border-bottom:1px solid var(--line);padding-bottom:24px;margin-bottom:30px;}
+.kicker{color:var(--info);font-size:12.5px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:10px}
+h1{font-size:26px;line-height:1.35;margin:0 0 12px;font-weight:650}
+.meta{color:var(--tx3);font-size:13px}
+h2{font-size:20px;margin:44px 0 14px;padding-left:11px;border-left:3px solid var(--info);font-weight:620}
+h3{font-size:15.5px;margin:24px 0 9px;font-weight:620}
+p{margin:9px 0}ul,ol{margin:9px 0;padding-left:22px}li{margin:5px 0}
+code{font-family:"Cascadia Mono",Consolas,monospace;font-size:12.6px;
+background:var(--panel2);padding:1.5px 5px;border-radius:4px;color:#c9d1d9}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+th{background:var(--panel2);color:var(--tx2);font-weight:600;text-align:left;
+padding:8px 10px;border-bottom:1px solid var(--line)}
+td{padding:7px 10px;border-bottom:1px solid #1f262f;vertical-align:top}
+tr:hover td{background:#141a21}
+.num{font-family:"Cascadia Mono",Consolas,monospace;text-align:right;white-space:nowrap}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}.dim{color:var(--tx3)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:15px 17px;margin:14px 0}
+.box.hi{border-color:rgba(248,81,73,.45);background:linear-gradient(180deg,rgba(248,81,73,.08),var(--panel))}
+.box.good{border-color:rgba(63,185,80,.4);background:linear-gradient(180deg,rgba(63,185,80,.07),var(--panel))}
+.box.note{border-color:rgba(88,166,255,.35);background:linear-gradient(180deg,rgba(88,166,255,.06),var(--panel))}
+.box h4{margin:0 0 7px;font-size:14.5px}
+.box p{margin:5px 0;font-size:14px;color:var(--tx2)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:11px;margin:16px 0}
+.stat{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+.stat .k{color:var(--tx3);font-size:12px;margin-bottom:4px}
+.stat .v{font-size:18px;font-weight:640;font-family:"Cascadia Mono",Consolas,monospace}
+.stat .s{color:var(--tx3);font-size:11.5px;margin-top:3px}
+.pill{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:10px;font-weight:600}
+.p0{background:rgba(248,81,73,.15);color:var(--bad);border:1px solid rgba(248,81,73,.4)}
+.p1{background:rgba(210,153,34,.15);color:var(--warn);border:1px solid rgba(210,153,34,.4)}
+.p2{background:rgba(88,166,255,.13);color:var(--info);border:1px solid rgba(88,166,255,.35)}
+pre{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;overflow-x:auto;
+font-family:"Cascadia Mono",Consolas,monospace;font-size:12.4px;line-height:1.65;color:#c9d1d9}
+footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:var(--tx3);font-size:12.5px}
+</style>
+</head>
+<body><div class="wrap">
+
+<header>
+<div class="kicker">FIX · INSPECT · VERDICT</div>
+<h1>缺陷修复、v8_9 源文件体检与项目可靠性判定</h1>
+<div class="meta">项目 <code>F:\B_Simulation\fangzhen-3\OpenFOAM</code> ｜ 2026-10-21 08:05 ｜
+本轮基于上一轮复核的结论，逐条回到代码与运行输出确认</div>
+</header>
+
+<div class="box hi">
+<h4>先说最重要的三条</h4>
+<p><b>① 原结论被推翻。</b>修完缺陷、把两个结构都跑到收敛（同为 15000 外迭代）后，
+v8_8 冷凝量 <b>1.626 mg/h</b>、v8_1 <b>1.645 mg/h</b>——<b>v8_8 反而低 1.2%，两者在当前精度下无法区分</b>。
+原先"v8_8 高 6.0%"是三个错误叠加的产物：拿收敛的 v8_1 比未收敛的 v8_8、NTU_m 高估 1.7–1.9 倍、
+以及"出口取饱和"这个不成立的假设。</p>
+<p><b>② 模型形式不确定度（±11%）已大于结构差异（1.2%）。</b>这是当前对比的硬限制：
+在改用活塞流/全混一致的口径之前，任何"谁更好"的结论都不成立。</p>
+<p><b>③ v8_9 源网格健康，但项目对该文件判定为「需修复」。</b>0 负体积、0 非法面、0 孤立单元；
+但 10/11 个边界区名是占位符、<code>faceType</code> 全为 5 无法判别，边界完整性无法确认，
+且网格尺度比 v8_1 大 5.6 倍。</p>
+</div>
+
+<div class="grid">
+<div class="stat"><div class="k">v8_1 冷凝量</div><div class="v">1.645 mg/h</div><div class="s">区间 1.321–1.645</div></div>
+<div class="stat"><div class="k">v8_8 冷凝量</div><div class="v">1.626 mg/h</div><div class="s">区间 1.356–1.626</div></div>
+<div class="stat"><div class="k">结构差异</div><div class="v">−1.2%</div><div class="s">远小于模型形式不确定度</div></div>
+<div class="stat"><div class="k">v8_9 负体积</div><div class="v">0</div><div class="s">705,138 单元全正</div></div>
+<div class="stat"><div class="k">v8_9 规模</div><div class="v">705k 单元</div><div class="s">比 v8_1 大 5.6×</div></div>
+<div class="stat"><div class="k">可靠性判定</div><div class="v" style="color:var(--warn)">需修复</div><div class="s">非不可靠</div></div>
+</div>
+
+<h2>一、缺陷修复（逐条）</h2>
+
+<h3>1.1 已修（确认存在）</h3>
+<table>
+<thead><tr><th>编号</th><th>根因</th><th>修改内容</th><th>验证方式与结果</th></tr></thead>
+<tbody>
+<tr><td><b>A3</b><br>NTU_m 高估 1.7–1.9×</td>
+<td>同一份代码里并存两套 conductance：<code>h_bar</code> 用「体积平均主流温度」、<code>UA</code> 用「对数平均温差」；<code>h_m</code>/<code>NTU_m</code> 沿用了 <code>h_bar</code> 那套，而湿工况求解用的是 <code>UA</code></td>
+<td>传导/传质量一律由 UA 派生：<code>h=UA/A</code>、<code>h_m=h/(ρ·cp·Le^{2/3})</code>、<code>NTU_m=UA/(cp·ṁ·Le^{2/3})</code>；加自洽断言；<code>h_bar</code> 降为 <code>h_bar_diag</code></td>
+<td>断言通过。NTU_m：v8_1 6.61→<b>3.456</b>，v8_8 7.24→<b>4.253</b>。传质校核余量由 5.1×/3.8× 降到 2.7×/2.3×</td></tr>
+
+<tr><td><b>A4</b><br>集总模型对 v8_8 结构性失效</td>
+<td>v8_8 壁温分布过宽（σ=2.86 K，中位 283.6 K 高于干工况出口 280.4 K），单一平均壁温把「冷区主导冷却、暖区近似惰性」抹平；取中位算 ΔT_lm 得负温差，数学上无定义</td>
+<td>新增 <code>zoned_condensation()</code>：按壁温<b>等面积</b>分带（等面积避免偏态分布出现空带），热导按各带壁面热流份额分配总 UA（热流相对分布可信、绝对量用焓平衡校正），逐带算显热与 Stefan 传质</td>
+<td>分带数敏感性：v8_1 5/10/20 带 = 1.6453/1.6450/1.6447（&lt;0.03%）；v8_8 = 1.6425/1.6264/1.6264（&lt;1%）</td></tr>
+
+<tr><td><b>新发现</b><br>「出口取平衡饱和」不成立</td>
+<td>该假设隐含"传质足够快"，但热平衡才是瓶颈——壁面能带走的热量有限，潜热把气体托住，出口温度远高于壁温，因此气体到不了饱和</td>
+<td>分区模型<b>不再假设饱和</b>，直接解质量方程求出口含湿量；保留活塞流（主口径）与全混（下界）两个结果，其差即模型形式不确定度</td>
+<td>实测出口饱和度 Y/Y_sat：v8_1 <b>0.376</b>、v8_8 <b>0.499</b>——均<b>未饱和</b>，原假设被证伪</td></tr>
+
+<tr><td><b>A6</b><br>内部面数≠单元数</td>
+<td><code>read_internal</code> 在 <code>internalField</code> 为 uniform 时用 <code>nei.max()+1</code> 当单元数</td>
+<td>改为 <code>own.max()+1</code></td>
+<td>当前两算例均为 nonuniform，未触发；属潜伏缺陷</td></tr>
+
+<tr><td><b>A5</b><br>生成物入库</td>
+<td><code>.gitignore</code> 只加了 <code>_*.json</code>/<code>_*.tmp</code>，漏了 <code>_*.txt</code></td>
+<td>补 <code>_*.txt</code>；<code>git rm --cached _cleanup_report.txt</code></td>
+<td><code>git check-ignore</code> 命中；追踪文件 271→270</td></tr>
+
+<tr><td><b>A1</b><br>热负荷口径正交校核缺失</td>
+<td>只有一个口径就无法判断 wallHeatFlux 与焓平衡谁更可信</td>
+<td>新增 <code>Q_solid_W</code>（固体侧冷板热流）输出</td>
+<td>两结构均返回 0.0（固体区 postProcessing 在并行下未合并），<b>该项本轮未取得有效证据，仍为 A1 的开放问题</b></td></tr>
+
+<tr><td><b>A2</b><br>v8_8 未收敛</td>
+<td>9000 外迭代时出口温度仍以 2.85e-4 K/步下滑，按几何衰减外推还剩约 1 K</td>
+<td>续算至 15000（8 进程，rc=0）</td>
+<td>T_out_mw：280.384（9000）→ <b>279.5</b>（15000）；energy_ratio 1.144→<b>1.102</b>，确认其中约 4 个百分点确属未收敛</td></tr>
+</tbody>
+</table>
+
+<h3>1.2 跳过（不成立或无法复现）</h3>
+<table>
+<thead><tr><th>项</th><th>判定</th><th>理由</th></tr></thead>
+<tbody>
+<tr><td>A8：README §3.7 的解释器路径失效</td><td><span class="ok">误判，跳过</span></td><td>实测 <code>C:/Users/LELE/.workbuddy/binaries/python/envs/default/Scripts/python.exe</code> 存在且 numpy 2.5.2 可用，命令可复现</td></tr>
+<tr><td>A10：并行 <code>postProcessing/</code> 只读到 processor0</td><td><span class="ok">误判，跳过</span></td><td>实测 <code>m_in</code> 读到 −1.99984e-5，是<b>总量</b>而非分区份额，与我的场积分逐位吻合</td></tr>
+<tr><td>A7：cas.h5 转换溯源</td><td><span class="warn">信息不足，未修</span></td><td>本轮仍未亲自重跑转换；<code>log.audit_convert_v88</code> 的单元数与 caseCHT_v88 一致，但写出目录是 <code>_audit_v88</code>。留作待办 T7</td></tr>
+</tbody>
+</table>
+
+<h2>二、v8_9 cas.h5 体检</h2>
+
+<h3>2.1 完整性与规模</h3>
+<table>
+<thead><tr><th>项目</th><th class="num">数值</th><th>判定</th></tr></thead>
+<tbody>
+<tr><td>文件大小 / HDF5 合法性 / Fluent 版本</td><td class="num">122.34 MB / 是 / 23.2</td><td class="ok">完整</td></tr>
+<tr><td>节点数</td><td class="num">3,068,872</td><td>—</td></tr>
+<tr><td>面数（内部 / 边界）</td><td class="num">4,092,408（3,927,457 / 164,951）</td><td class="ok">自校验一致</td></tr>
+<tr><td>单元数（2 个区：215,410 + 489,728）</td><td class="num">705,138</td><td>双区域结构，与 v8_8 同构</td></tr>
+<tr><td>非法面（节点数&lt;3）</td><td class="num">0</td><td class="ok">通过</td></tr>
+<tr><td>孤立单元（未被任何面引用）</td><td class="num">0</td><td class="ok">通过</td></tr>
+<tr><td><b>负体积单元</b></td><td class="num"><b>0</b></td><td class="ok">通过</td></tr>
+<tr><td>近零体积单元（&lt;1e-15 m³）</td><td class="num">0</td><td class="ok">通过</td></tr>
+<tr><td>总体积</td><td class="num">106.07 cm³</td><td>包围盒 151.68 cm³，占比 70%，合理</td></tr>
+<tr><td>单元体积范围（最小–最大）</td><td class="num">5.67e-13 – 9.71e-9 m³</td><td class="warn">极值比 17,116×，跨度偏大</td></tr>
+<tr><td>单元体积分位 p1/p50/p99</td><td class="num">2.11e-12 / 1.79e-11 / 3.06e-9 m³</td><td>中位数正常</td></tr>
+</tbody>
+</table>
+
+<h3>2.2 区域与边界名称</h3>
+<table>
+<thead><tr><th>类别</th><th>内容</th><th>问题</th></tr></thead>
+<tbody>
+<tr><td>单元区</td><td>id=2461 名称 <code>____-_;zone-----</code>（215,410 单元）；id=2458 名称 <code>zone2458</code>（489,728 单元）</td><td class="warn">中文名在导出时损坏为 <code>____</code>，只能靠关键字</td></tr>
+<tr><td>面区（11 个）</td><td>id=33 的拼接名里可提取出 <code>wall_cool</code>、<code>inlet</code>、<code>outlet</code>、<code>interior</code>；<b>其余 10 个全部是 <code>zone&lt;id&gt;</code> 占位符</b></td><td class="bad">10/11 个区<b>无法从名字判定角色</b></td></tr>
+<tr><td>面类型码</td><td><code>faceType</code> 全部 = 5；<code>zoneType</code> 仅 {2,3,5,20} 四种</td><td class="bad">无法据此区分 wall/inlet/outlet</td></tr>
+<tr><td>成对同面数区</td><td>id 2 与 937 各 55,466；id 3 与 186 各 15,045；id 30 与 31 为 2,569/2,564</td><td>提示存在 shadow 对（耦合界面两侧），但无法证实归属</td></tr>
+</tbody>
+</table>
+<p class="dim">注：<code>interior</code> 区（zoneType=2）共 2 个、合计 3,927,457 面，与 <code>c1</code> 长度逐位一致——这是本工具的自校验项，也是判定面序的依据。</p>
+
+<h2>三、项目可靠性判定</h2>
+
+<h3>3.1 三维打分</h3>
+<table>
+<thead><tr><th>维度</th><th>结论</th><th>支撑依据</th></tr></thead>
+<tbody>
+<tr><td><b>网格质量</b></td><td><span class="ok">通过</span>（有保留）</td>
+<td>0 负体积 / 0 近零体积 / 0 非法面 / 0 孤立单元，源网格本身可直接进转换器。<br>
+保留项：单元体积极值比 17,116×（v8_1 实测 8,873×），跨度更大；且 705,138 单元比 v8_1 大 5.6×、比 v8_8 大 8.7%，会进一步放大已知的"网格尺度不一致"问题</td></tr>
+<tr><td><b>边界条件完整性</b></td><td><span class="bad">不通过</span></td>
+<td>10/11 个边界区名是占位符，<code>faceType</code> 全为 5 无法判别类型 → <b>无法确定哪个区是 wall_cool（冷源）、哪个是 inlet/outlet</b>。若强行转换，冷源可能挂错区，冷凝量会完全失真</td></tr>
+<tr><td><b>求解设置与物性一致性</b></td><td><span class="warn">暂无法判定</span></td>
+<td>v8_9 尚未进入管线。已知工程侧有 <code>generate_case.py</code> 统一参数与 <code>preflight.py</code> 11 项门禁，但必须在转换后逐项核对：冷源面积是否 16.000 cm²、入口/出口是否 1.130 cm²、物性是否与 v8_1/v8_8 逐字段一致</td></tr>
+</tbody>
+</table>
+
+<div class="box note">
+<h4>总判定：需修复（不是"不可靠"，也不是"可靠"）</h4>
+<p><b>为什么不是"可靠"：</b>边界区名损坏使边界条件完整性无法确认，这是进入同口径对比的硬门槛；
+且项目自身还有三个未闭环项——两结构网格差 6.9×、集总/模型形式不确定度 ±11% 已大于结构差异、A1 的
+热负荷口径偏差（v8_1 7.8% / v8_8 10.2%）仍未归因。</p>
+<p><b>为什么不是"不可靠"：</b>源网格全部合法性指标通过；工程侧的工具链（转换器、preflight 门禁、
+稳态指标、清理核对、本轮的 h5 体检器）完整且可回归；v8_1/v8_8 已各自跑到收敛并给出自洽的指标。</p>
+<p><b>进 v8_9 之前必须先做三件事：</b>① 转换后用 <code>checkMesh</code> + <code>preflight</code>
+确认补丁名与冷源面积；② 把 v8_9 的网格尺度与 v8_1/v8_8 统一到 1.5× 以内（或回 Fluent 侧统一导出设置）；
+③ 统一模型形式口径（活塞流），否则结果不可与现有两结构放在同一张表里。</p>
+</div>
+
+<h2>四、修复后的 v8_1 / v8_8 对比（15000 外迭代，同口径）</h2>
+<table>
+<thead><tr><th>指标</th><th class="num">v8_1</th><th class="num">v8_8</th><th class="num">差</th></tr></thead>
+<tbody>
+<tr><td>流固界面面积 cm²</td><td class="num">107.91</td><td class="num">123.64</td><td class="num">+14.6%</td></tr>
+<tr><td>界面均温 K</td><td class="num">278.20</td><td class="num">278.80</td><td class="num">+0.6 K</td></tr>
+<tr><td>干工况出口温度 K</td><td class="num">279.5</td><td class="num">279.5</td><td class="num">持平</td></tr>
+<tr><td>干工况热负荷 Q_flux W</td><td class="num">0.5757</td><td class="num">0.5771</td><td class="num">+0.2%</td></tr>
+<tr><td>总热导 UA W/K</td><td class="num">0.06273</td><td class="num">0.07721</td><td class="num">+23.1%</td></tr>
+<tr><td>整体换热系数 h=UA/A W/m²K</td><td class="num">5.813</td><td class="num">6.245</td><td class="num">+7.4%</td></tr>
+<tr><td>NTU_m（UA 自洽）</td><td class="num">3.456</td><td class="num">4.253</td><td class="num">+23.1%</td></tr>
+<tr><td><b>冷凝量（活塞流，主口径）mg/h</b></td><td class="num"><b>1.645</b></td><td class="num"><b>1.626</b></td><td class="num">−1.2%</td></tr>
+<tr><td>冷凝量（全混，下界）mg/h</td><td class="num">1.321</td><td class="num">1.356</td><td class="num">+2.6%</td></tr>
+<tr><td>出口含湿量 g/kg</td><td class="num">6.231</td><td class="num">6.497</td><td class="num">+4.3%</td></tr>
+<tr><td>湿工况出口温度 K</td><td class="num">295.0</td><td class="num">291.2</td><td class="num">−3.8 K</td></tr>
+<tr><td>出口饱和度 Y/Y_sat</td><td class="num">0.376</td><td class="num">0.499</td><td class="num">均未饱和</td></tr>
+<tr><td>冷凝效率 η</td><td class="num">0.791</td><td class="num">0.782</td><td class="num">−1.1%</td></tr>
+<tr><td>热流积分/焓平衡比</td><td class="num">1.078</td><td class="num">1.102</td><td class="num">口径未闭合</td></tr>
+</tbody>
+</table>
+
+<div class="box hi">
+<h4>结论：两者在现有精度下不可区分</h4>
+<p>v8_8 的换热能力确实更强（UA +23.1%、h +7.4%），但它的<b>出口含湿量反而更高</b>（6.50 vs 6.23 g/kg），
+冷凝量低 1.2%。机制上：v8_8 多出来的 14.6% 面积里，相当一部分壁温偏高、不在有效冷却
+（上一轮实测有效冷却面积比 88.0% vs 99.9%），这些面积把气体"焐热"反而抬高了出口温度势，
+抵消了热导优势。</p>
+<p><b>1.2% 的差异落在 ±11% 的模型形式不确定度与 6.9× 的网格尺度差异之内，
+不构成可发表的结论。</b>能确定的是：两个结构的换热能力排序（v8_8 &gt; v8_1，+23% UA）是稳健的；
+"谁的冷凝量更大"在当前方法下无法判定。</p>
+</div>
+
+<footer>
+证据文件：<code>_m_v81.json</code>、<code>_m_v88.json</code>（均 15000 外迭代）、
+<code>_inspect_v89.json</code>、<code>log.cht_v88_cont.txt</code>、<code>log.recon_v88b.txt</code>。<br>
+工具：<code>tools/condensation_metrics.py</code>（含 <code>zoned_condensation</code>）、
+<code>tools/inspect_cas_h5.py</code>（本轮新增）。<br>
+本文件取代《报告_三任务交付_2026-10-21.html》§3 中的冷凝量、UA、NTU_m 与出口含湿量数字。
+</footer>
+
+</div></body></html>
