@@ -18,6 +18,15 @@
 - `system/` 与 `constant/regionProperties` 从 caseCHT_v88 复制（求解设置按同口径共享）。
 
 ## 待办
+0. **网格丢失时的重建**（2026-10-21 11:40 实测：切离开本分支 caseCHT_v89/ 整目录消失，
+   含未入库 polyMesh；已重建一次，5.5 分钟）：
+   ```
+   "$PY" tools/fluent_cas_to_foam_cht.py \
+     "F:/B_Simulation/fangzhen-3/Qishi_v8_9_20261012/qishi_v8_9_files/dp0/FLTG/Fluent/FLTG.1-3.cas.h5" \
+     caseCHT_v89
+   ```
+   验收：fluid 489,728 / solid 215,410，补丁名如「已完成」第 2 条。重建后工作树留在本分支。
+   ⚠ 另注意：`git checkout v8_9-setup` 偶发静默删除工作树 tools/（rc=0），`git restore .` 恢复。
 1. **缺 `0/`**：需要 CHT 字典生成器（待办 T6）或从 caseCHT_v88 手工拷 0/ 后把
    `interface`/`fluid_to_solid`/`solid_to_fluid` 的 nonuniform 列表改成 uniform 占位
    （70,511 面，与 v8_8 的 62,158 不一致，直接拷会 FATAL）。
