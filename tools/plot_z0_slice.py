@@ -4,11 +4,14 @@
 ================================================================================
  z=0（xy）平面的温度 / 流场图：读 OpenFOAM surfaces FO 切出的 VTK
 ================================================================================
- 先在算例目录里切面：
-   postProcess -region fluid -func surfaces -latestTime   → postProcessing/surfaces/<t>/{T,U,p_rgh}_z0.vtk
-   postProcess -region solid -func surfaces -latestTime
- ⚠️ 多区域算例的 postProcessing 路径**不带 region 前缀**，两个区域互相覆盖，
-    跑完一个必须立刻拷走改名。
+ 先在算例目录里切面（切片字典见 system/surfaces 与 system/surfaces_flow）：
+   postProcess -region fluid -func surfaces_flow -latestTime → postProcessing/surfaces_flow/<t>/{T,U,p_rgh}_z0.vtk
+   postProcess -region solid -func surfaces       -latestTime → postProcessing/surfaces/<t>/T_z0.vtk
+ ⚠️ postProcessing 输出目录按【-func 的函数对象名】分开（surfaces_flow/ vs surfaces/），
+    流体/固体两区只要 func 名不同就【不会】互相覆盖，无需跑完立刻拷走；
+    只有两个区域共用同一个 func 名时才写入同一目录、才会互相覆盖。
+    2026-10-21 实测：system/surfaces、system/surfaces_flow 两字典已在
+    caseCHT_qishi / caseCHT_v88 / caseCHT_v89 的 system/ 就位（内容一致，已核对哈希）。
 
  用法：
    python tools/plot_z0_slice.py fluid_T.vtk fluid_U.vtk out.png [solid_T.vtk]
